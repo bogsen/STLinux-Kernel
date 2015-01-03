@@ -82,3 +82,4 @@ void rm_tch_ctrl_set_parameter(void *arg)
 MODULE_AUTHOR("xxxxxxxxxx <xxxxxxxx@rad-ic.com>");
 MODULE_DESCRIPTION("Raydium touchscreen control functions");
 MODULE_LICENSE("GPL");
+

@@ -24,6 +24,7 @@
 #define FALSE					0
 #define DEBUG_DRIVER			0x01
 #define DEBUG_REGISTER			0x02
+#define DEBUG_KTHREAD			0x04
 
 #define RM_IOCTL_REPORT_POINT				0x1001
 #define RM_IOCTL_SET_HAL_PID				0x1002
@@ -48,7 +49,7 @@
 #define RM_VARIABLE_DPW							0x0B
 #define RM_VARIABLE_NS_MODE						0x0C
 #define RM_VARIABLE_TOUCHFILE_STATUS			0x0D
-#define RM_VARIABLE_STYLUS_STATUS				0x0E
+#define RM_VARIABLE_TOUCH_EVENT					0x0E
 
 
 #define RM_IOCTL_GET_VARIABLE				0x1011
@@ -59,6 +60,7 @@
 #define RM_IOCTL_SET_KRL_TBL				0x1013
 #define RM_IOCTL_WATCH_DOG					0x1014
 #define RM_IOCTL_SET_BASELINE				0x1015
+#define RM_IOCTL_INIT_SERVICE				0x1016
 
 #define RM_INPUT_RESOLUTION_X				4096
 #define RM_INPUT_RESOLUTION_Y				4096
@@ -97,7 +99,6 @@
 #define RM_PLATFORM_L005	0x09
 #define RM_PLATFORM_K156	0x0A
 #define RM_PLATFORM_T008	0x0B
-#define RM_PLATFORM_T008_2	0x0D
 #define RM_PLATFORM_RAYPRJ	0x80
 
 /***************************************************************************
@@ -221,7 +222,8 @@
 #define INPUT_PROTOCOL_TYPE_B	0x02
 #define INPUT_PROTOCOL_CURRENT_SUPPORT INPUT_PROTOCOL_TYPE_B
 
-#define INPUT_POINT_RESET	0x80
+#define INPUT_SLOT_RESET	0x80
+#define INPUT_ID_RESET		0xFF
 #define MAX_REPORT_TOUCHED_POINTS	10
 
 #define POINT_TYPE_NONE			0x00
@@ -239,10 +241,29 @@
 #define EVENT_REPORT_MODE_STYLUS_ONLY				0x05
 #define EVENT_REPORT_MODE_ERASER_ONLY				0x06
 #define EVENT_REPORT_MODE_TYPE_NUM					0x07
+#define EVENT_REPORT_MODE_ALL_TYPE_POINTS			0x10
+
 /***************************************************************************
  *	DO NOT MODIFY - Kernel Point Report Definition
  *	NOTE: Need to sync with HAL
  ***************************************************************************/
+
+/*#define ENABLE_CALC_QUEUE_COUNT*/
+/*#define ENABLE_SLOW_SCAN*/
+#define ENABLE_SMOOTH_LEVEL
+#define ENABLE_SPI_SETTING		0
+#define ENABLE_FREQ_HOPPING		1
+#define ENABLE_FB_CALLBACK		0
+
+#define WORK_QUEUE	0
+#define KTHREAD		1
+#define ISR_POST_HANDLER WORK_QUEUE                 /*or KTHREAD*/
+
+enum tch_update_reason {
+	STYLUS_DISABLE_BY_WATER = 0x01,
+	STYLUS_DISABLE_BY_NOISE,
+	STYLUS_IS_ENABLED = 0xFF,
+};
 
 struct rm_touch_event {
 	unsigned char uc_touch_count;
@@ -275,3 +296,4 @@ int rm_tch_spi_byte_write(unsigned char u8_addr, unsigned char u8_value);
 int rm_tch_spi_byte_read(unsigned char u8_addr, unsigned char *p_u8_value);
 
 #endif				/*_RM31080A_TS_H_*/
+

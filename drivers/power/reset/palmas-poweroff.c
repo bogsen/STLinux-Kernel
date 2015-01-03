@@ -1,7 +1,7 @@
 /*
  * palmas-poweroff.c : Power off and reset for Palma device.
  *
- * Copyright (c) 2013, NVIDIA Corporation.
+ * Copyright (c) 2013-2014, NVIDIA CORPORATION.  All rights reserved.
  *
  * Author: Laxman Dewangan <ldewangan@nvidia.com>
  *
@@ -134,6 +134,12 @@ static void palmas_power_off(void *drv_data)
 
 	dev_info(palmas_pm->dev, "Powering off the device\n");
 
+	/* Lock LONG PRESS KEY bits */
+	palmas_update_bits(palmas, PALMAS_PMU_CONTROL_BASE,
+			PALMAS_LONG_PRESS_KEY,
+			PALMAS_LONG_PRESS_KEY_LPK_LOCK,
+			PALMAS_LONG_PRESS_KEY_LPK_LOCK);
+
 	/* Power off the device */
 	palmas_update_bits(palmas, PALMAS_PMU_CONTROL_BASE,
 				PALMAS_DEV_CTRL, 1, 0);
@@ -146,6 +152,7 @@ static void palmas_power_reset(void *drv_data)
 	unsigned int val;
 	int i;
 	int ret;
+	int num_of_retries = 5;
 
 	palmas_allow_atomic_xfer(palmas);
 
@@ -229,8 +236,16 @@ reset_direct:
 	palmas_update_bits(palmas, PALMAS_PMU_CONTROL_BASE,
 			PALMAS_SWOFF_COLDRST, PALMAS_SWOFF_COLDRST_SW_RST,
 			PALMAS_SWOFF_COLDRST_SW_RST);
-	palmas_update_bits(palmas, PALMAS_PMU_CONTROL_BASE,
+	while (num_of_retries--) {
+		ret = palmas_update_bits(palmas, PALMAS_PMU_CONTROL_BASE,
 				PALMAS_DEV_CTRL, 0x2, 0x2);
+		if (ret < 0)
+			dev_err(palmas_pm->dev, "PALMAS_DEV_CTRL update failed: %d ...retrying %d\n",
+				ret, num_of_retries);
+		else
+			dev_info(palmas_pm->dev, " Retrying... %d\n",
+				num_of_retries);
+	}
 }
 
 static int palmas_configure_power_on(void *drv_data,

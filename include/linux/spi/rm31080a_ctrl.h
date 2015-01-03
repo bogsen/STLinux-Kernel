@@ -43,3 +43,4 @@ unsigned char rm_tch_ctrl_get_idle_mode(unsigned char *p);
 void rm_tch_ctrl_set_parameter(void *arg);
 void rm_set_repeat_times(u8 u8Times);
 #endif				/*_RM31080A_CTRL_H_*/
+
