@@ -1960,7 +1960,9 @@ static void mwifiex_sdio_card_reset_work(struct mwifiex_adapter *adapter)
 	mmc_remove_host(target);
 	/* 20ms delay is based on experiment with sdhci controller */
 	mdelay(20);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
 	target->rescan_entered = 0; /* rescan non-removable cards */
+#endif
 	mmc_add_host(target);
 }
 
