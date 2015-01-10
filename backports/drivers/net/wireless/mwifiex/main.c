@@ -659,7 +659,9 @@ mwifiex_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct mwifiex_private *priv = mwifiex_netdev_get_priv(dev);
 	struct sk_buff *new_skb;
 	struct mwifiex_txinfo *tx_info;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,3,0))
 	bool multicast;
+#endif
 
 	dev_dbg(priv->adapter->dev, "data: %lu BSS(%d-%d): Data <= kernel\n",
 		jiffies, priv->bss_type, priv->bss_num);
@@ -700,6 +702,7 @@ mwifiex_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	tx_info->bss_type = priv->bss_type;
 	tx_info->pkt_len = skb->len;
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,3,0))
 	multicast = is_multicast_ether_addr(skb->data);
 
 	if (unlikely(!multicast && skb->sk &&
@@ -708,6 +711,7 @@ mwifiex_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		skb = mwifiex_clone_skb_for_tx_status(priv,
 						      skb,
 					MWIFIEX_BUF_FLAG_EAPOL_TX_STATUS, NULL);
+#endif
 
 	/* Record the current time the packet was queued; used to
 	 * determine the amount of time the packet was queued in
