@@ -320,7 +320,7 @@ static inline int igb_desc_unused(struct igb_ring *ring)
 	return ring->count + ring->next_to_clean - ring->next_to_use - 1;
 }
 
-#ifdef CONFIG_IGB_HWMON
+#ifdef CONFIG_BACKPORT_IGB_HWMON
 
 #define IGB_HWMON_TYPE_LOC	0
 #define IGB_HWMON_TYPE_TEMP	1
@@ -440,7 +440,7 @@ struct igb_adapter {
 	u32 rx_hwtstamp_cleared;
 
 	char fw_version[32];
-#ifdef CONFIG_IGB_HWMON
+#ifdef CONFIG_BACKPORT_IGB_HWMON
 	struct hwmon_buff *igb_hwmon_buff;
 	bool ets;
 #endif
@@ -531,7 +531,7 @@ void igb_ptp_rx_pktstamp(struct igb_q_vector *q_vector, unsigned char *va,
 			 struct sk_buff *skb);
 int igb_ptp_set_ts_config(struct net_device *netdev, struct ifreq *ifr);
 int igb_ptp_get_ts_config(struct net_device *netdev, struct ifreq *ifr);
-#ifdef CONFIG_IGB_HWMON
+#ifdef CONFIG_BACKPORT_IGB_HWMON
 void igb_sysfs_exit(struct igb_adapter *adapter);
 int igb_sysfs_init(struct igb_adapter *adapter);
 #endif

@@ -64,7 +64,7 @@ static __genl_const struct genl_multicast_group nl80211_mcgrps[] = {
 	[NL80211_MCGRP_REGULATORY] = { .name = "regulatory", },
 	[NL80211_MCGRP_MLME] = { .name = "mlme", },
 	[NL80211_MCGRP_VENDOR] = { .name = "vendor", },
-#ifdef CONFIG_NL80211_TESTMODE
+#ifdef CONFIG_BACKPORT_NL80211_TESTMODE
 	[NL80211_MCGRP_TESTMODE] = { .name = "testmode", }
 #endif
 };
@@ -1514,7 +1514,7 @@ static int nl80211_send_wiphy(struct cfg80211_registered_device *rdev,
 		}
 		CMD(start_p2p_device, START_P2P_DEVICE);
 		CMD(set_mcast_rate, SET_MCAST_RATE);
-#ifdef CONFIG_NL80211_TESTMODE
+#ifdef CONFIG_BACKPORT_NL80211_TESTMODE
 		CMD(testmode_cmd, TESTMODE);
 #endif
 		if (state->split) {
@@ -2935,7 +2935,7 @@ static int nl80211_set_key(struct sk_buff *skb, struct genl_info *info)
 		if (err)
 			goto out;
 
-#ifdef CONFIG_CFG80211_WEXT
+#ifdef CONFIG_BACKPORT_CFG80211_WEXT
 		dev->ieee80211_ptr->wext.default_key = key.idx;
 #endif
 	} else {
@@ -2957,7 +2957,7 @@ static int nl80211_set_key(struct sk_buff *skb, struct genl_info *info)
 		if (err)
 			goto out;
 
-#ifdef CONFIG_CFG80211_WEXT
+#ifdef CONFIG_BACKPORT_CFG80211_WEXT
 		dev->ieee80211_ptr->wext.default_mgmt_key = key.idx;
 #endif
 	}
@@ -3059,7 +3059,7 @@ static int nl80211_del_key(struct sk_buff *skb, struct genl_info *info)
 				   key.type == NL80211_KEYTYPE_PAIRWISE,
 				   mac_addr);
 
-#ifdef CONFIG_CFG80211_WEXT
+#ifdef CONFIG_BACKPORT_CFG80211_WEXT
 	if (!err) {
 		if (key.idx == dev->ieee80211_ptr->wext.default_key)
 			dev->ieee80211_ptr->wext.default_key = -1;
@@ -7305,7 +7305,7 @@ void __cfg80211_send_event_skb(struct sk_buff *skb, gfp_t gfp)
 }
 EXPORT_SYMBOL(__cfg80211_send_event_skb);
 
-#ifdef CONFIG_NL80211_TESTMODE
+#ifdef CONFIG_BACKPORT_NL80211_TESTMODE
 static int nl80211_testmode_do(struct sk_buff *skb, struct genl_info *info)
 {
 	struct cfg80211_registered_device *rdev = info->user_ptr[0];
@@ -10352,7 +10352,7 @@ static __genl_const struct genl_ops nl80211_ops[] = {
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
 	},
-#ifdef CONFIG_NL80211_TESTMODE
+#ifdef CONFIG_BACKPORT_NL80211_TESTMODE
 	{
 		.cmd = NL80211_CMD_TESTMODE,
 		.doit = nl80211_testmode_do,

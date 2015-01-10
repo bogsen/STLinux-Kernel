@@ -69,7 +69,7 @@
  */
 #define DRV_DESCRIPTION	"Intel(R) Wireless WiFi Link AGN driver for Linux"
 
-#ifdef CONFIG_IWLWIFI_DEBUG
+#ifdef CONFIG_BACKPORT_IWLWIFI_DEBUG
 #define VD "d"
 #else
 #define VD
@@ -1081,7 +1081,7 @@ static void iwl_uninit_drv(struct iwl_priv *priv)
 	kfree(priv->beacon_cmd);
 	kfree(rcu_dereference_raw(priv->noa_data));
 	iwl_calib_free_results(priv);
-#ifdef CONFIG_IWLWIFI_DEBUGFS
+#ifdef CONFIG_BACKPORT_IWLWIFI_DEBUGFS
 	kfree(priv->wowlan_sram);
 #endif
 }
@@ -1101,22 +1101,22 @@ static void iwl_set_hw_params(struct iwl_priv *priv)
 /* show what optional capabilities we have */
 static void iwl_option_config(struct iwl_priv *priv)
 {
-#ifdef CONFIG_IWLWIFI_DEBUG
-	IWL_INFO(priv, "CONFIG_IWLWIFI_DEBUG enabled\n");
+#ifdef CONFIG_BACKPORT_IWLWIFI_DEBUG
+	IWL_INFO(priv, "CONFIG_BACKPORT_IWLWIFI_DEBUG enabled\n");
 #else
-	IWL_INFO(priv, "CONFIG_IWLWIFI_DEBUG disabled\n");
+	IWL_INFO(priv, "CONFIG_BACKPORT_IWLWIFI_DEBUG disabled\n");
 #endif
 
-#ifdef CONFIG_IWLWIFI_DEBUGFS
-	IWL_INFO(priv, "CONFIG_IWLWIFI_DEBUGFS enabled\n");
+#ifdef CONFIG_BACKPORT_IWLWIFI_DEBUGFS
+	IWL_INFO(priv, "CONFIG_BACKPORT_IWLWIFI_DEBUGFS enabled\n");
 #else
-	IWL_INFO(priv, "CONFIG_IWLWIFI_DEBUGFS disabled\n");
+	IWL_INFO(priv, "CONFIG_BACKPORT_IWLWIFI_DEBUGFS disabled\n");
 #endif
 
-#ifdef CONFIG_IWLWIFI_DEVICE_TRACING
-	IWL_INFO(priv, "CONFIG_IWLWIFI_DEVICE_TRACING enabled\n");
+#ifdef CONFIG_BACKPORT_IWLWIFI_DEVICE_TRACING
+	IWL_INFO(priv, "CONFIG_BACKPORT_IWLWIFI_DEVICE_TRACING enabled\n");
 #else
-	IWL_INFO(priv, "CONFIG_IWLWIFI_DEVICE_TRACING disabled\n");
+	IWL_INFO(priv, "CONFIG_BACKPORT_IWLWIFI_DEVICE_TRACING disabled\n");
 #endif
 }
 
@@ -1791,7 +1791,7 @@ int iwl_dump_nic_event_log(struct iwl_priv *priv, bool full_log,
 	IWL_ERR(priv, "Start IWL Event Log Dump: display last %u entries\n",
 		size);
 
-#ifdef CONFIG_IWLWIFI_DEBUG
+#ifdef CONFIG_BACKPORT_IWLWIFI_DEBUG
 	if (buf) {
 		if (full_log)
 			bufsz = capacity * 48;

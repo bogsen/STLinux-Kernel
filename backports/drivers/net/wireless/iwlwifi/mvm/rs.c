@@ -1079,7 +1079,7 @@ void iwl_mvm_rs_tx_status(struct iwl_mvm *mvm, struct ieee80211_sta *sta,
 		return;
 	}
 
-#ifdef CONFIG_MAC80211_DEBUGFS
+#ifdef CONFIG_BACKPORT_MAC80211_DEBUGFS
 	/* Disable last tx check if we are debugging with fixed rate */
 	if (lq_sta->pers.dbg_fixed_rate) {
 		IWL_DEBUG_RATE(mvm, "Fixed rate. avoid rate scaling\n");
@@ -1948,7 +1948,7 @@ static bool rs_tpc_perform(struct iwl_mvm *mvm,
 	int weak, strong;
 	int weak_tpt = IWL_INVALID_VALUE, strong_tpt = IWL_INVALID_VALUE;
 
-#ifdef CONFIG_MAC80211_DEBUGFS
+#ifdef CONFIG_BACKPORT_MAC80211_DEBUGFS
 	if (lq_sta->pers.dbg_fixed_txp_reduction <= TPC_MAX_REDUCTION) {
 		IWL_DEBUG_RATE(mvm, "fixed tpc: %d\n",
 			       lq_sta->pers.dbg_fixed_txp_reduction);
@@ -2538,7 +2538,7 @@ static void *rs_alloc_sta(void *mvm_rate, struct ieee80211_sta *sta,
 	IWL_DEBUG_RATE(mvm, "create station rate scale window\n");
 
 	lq_sta->pers.drv = mvm;
-#ifdef CONFIG_MAC80211_DEBUGFS
+#ifdef CONFIG_BACKPORT_MAC80211_DEBUGFS
 	lq_sta->pers.dbg_fixed_rate = 0;
 	lq_sta->pers.dbg_fixed_txp_reduction = TPC_INVALID;
 #endif
@@ -2606,7 +2606,7 @@ static void rs_vht_set_enabled_rates(struct ieee80211_sta *sta,
 	}
 }
 
-#ifdef CONFIG_IWLWIFI_DEBUGFS
+#ifdef CONFIG_BACKPORT_IWLWIFI_DEBUGFS
 static void iwl_mvm_reset_frame_stats(struct iwl_mvm *mvm,
 				      struct iwl_mvm_frame_stats *stats)
 {
@@ -2791,7 +2791,7 @@ void iwl_mvm_rs_rate_init(struct iwl_mvm *mvm, struct ieee80211_sta *sta,
 	/* as default allow aggregation for all tids */
 	lq_sta->tx_agg_tid_en = IWL_AGG_ALL_TID;
 	lq_sta->is_agg = 0;
-#ifdef CONFIG_IWLWIFI_DEBUGFS
+#ifdef CONFIG_BACKPORT_IWLWIFI_DEBUGFS
 	iwl_mvm_reset_frame_stats(mvm, &mvm->drv_rx_stats);
 #endif
 	rs_initialize_lq(mvm, sta, lq_sta, band, init);
@@ -2815,7 +2815,7 @@ static void rs_rate_update(void *mvm_r,
 	iwl_mvm_rs_rate_init(mvm, sta, sband->band, false);
 }
 
-#ifdef CONFIG_MAC80211_DEBUGFS
+#ifdef CONFIG_BACKPORT_MAC80211_DEBUGFS
 static void rs_build_rates_table_from_fixed(struct iwl_mvm *mvm,
 					    struct iwl_lq_cmd *lq_cmd,
 					    enum ieee80211_band band,
@@ -2844,7 +2844,7 @@ static void rs_build_rates_table_from_fixed(struct iwl_mvm *mvm,
 
 	lq_cmd->agg_frame_cnt_limit = LINK_QUAL_AGG_FRAME_LIMIT_DEF;
 }
-#endif /* CONFIG_MAC80211_DEBUGFS */
+#endif /* CONFIG_BACKPORT_MAC80211_DEBUGFS */
 
 static void rs_fill_rates_for_column(struct iwl_mvm *mvm,
 				     struct iwl_lq_sta *lq_sta,
@@ -2975,7 +2975,7 @@ static void rs_fill_lq_cmd(struct iwl_mvm *mvm,
 	lq_cmd->agg_time_limit =
 		cpu_to_le16(LINK_QUAL_AGG_TIME_LIMIT_DEF);
 
-#ifdef CONFIG_MAC80211_DEBUGFS
+#ifdef CONFIG_BACKPORT_MAC80211_DEBUGFS
 	if (lq_sta->pers.dbg_fixed_rate) {
 		rs_build_rates_table_from_fixed(mvm, lq_cmd,
 						lq_sta->band,
@@ -3040,7 +3040,7 @@ static void rs_free_sta(void *mvm_r, struct ieee80211_sta *sta,
 	IWL_DEBUG_RATE(mvm, "leave\n");
 }
 
-#ifdef CONFIG_MAC80211_DEBUGFS
+#ifdef CONFIG_BACKPORT_MAC80211_DEBUGFS
 int rs_pretty_print_rate(char *buf, const u32 rate)
 {
 
@@ -3403,7 +3403,7 @@ static const struct rate_control_ops rs_mvm_ops = {
 	.alloc_sta = rs_alloc_sta,
 	.free_sta = rs_free_sta,
 	.rate_update = rs_rate_update,
-#ifdef CONFIG_MAC80211_DEBUGFS
+#ifdef CONFIG_BACKPORT_MAC80211_DEBUGFS
 	.add_sta_debugfs = rs_add_debugfs,
 	.remove_sta_debugfs = rs_remove_debugfs,
 #endif

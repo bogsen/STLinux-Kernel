@@ -425,7 +425,7 @@ struct sta_info {
 
 	struct ieee80211_tx_latency_stat *tx_lat;
 
-#ifdef CONFIG_MAC80211_MESH
+#ifdef CONFIG_BACKPORT_MAC80211_MESH
 	/*
 	 * Mesh peer link attributes
 	 * TODO: move to a sub-structure that is referenced with pointer?
@@ -445,7 +445,7 @@ struct sta_info {
 	enum nl80211_mesh_power_mode nonpeer_pm;
 #endif
 
-#ifdef CONFIG_MAC80211_DEBUGFS
+#ifdef CONFIG_BACKPORT_MAC80211_DEBUGFS
 	struct sta_info_debugfsdentries {
 		struct dentry *dir;
 		bool add_has_run;
@@ -471,7 +471,7 @@ struct sta_info {
 
 static inline enum nl80211_plink_state sta_plink_state(struct sta_info *sta)
 {
-#ifdef CONFIG_MAC80211_MESH
+#ifdef CONFIG_BACKPORT_MAC80211_MESH
 	return sta->plink_state;
 #endif
 	return NL80211_PLINK_LISTEN;
