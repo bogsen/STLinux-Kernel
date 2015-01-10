@@ -89,6 +89,9 @@ static void lowpan_frag_init(struct inet_frag_queue *q, const void *a)
 	fq->d_size = arg->d_size;
 	fq->saddr = *arg->src;
 	fq->daddr = *arg->dst;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,9,0)
+	spin_lock_init(&fq->lru_lock);
+#endif
 }
 
 static void lowpan_frag_expire(unsigned long data)
