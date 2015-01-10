@@ -481,9 +481,11 @@ static int __net_init lowpan_frags_ns_sysctl_register(struct net *net)
 		table[1].extra2 = &ieee802154_lowpan->frags.high_thresh;
 		table[2].data = &ieee802154_lowpan->frags.timeout;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,8,0)
 		/* Don't export sysctls to unprivileged users */
 		if (net->user_ns != &init_user_ns)
 			table[0].procname = NULL;
+#endif /* LINUX_VERSION_CODE <= KERNEL_VERSION(3,8,0) */
 	}
 
 	hdr = register_net_sysctl(net, "net/ieee802154/6lowpan", table);
