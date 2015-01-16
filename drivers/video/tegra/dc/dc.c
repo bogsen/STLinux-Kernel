@@ -2916,6 +2916,13 @@ static ssize_t switch_modeset_print_mode(struct switch_dev *sdev, char *buf)
 }
 #endif
 
+int use_fbcon_fix = 0;
+static int __init enable_fbcon_fix(char *str) {
+	use_fbcon_fix = 1;
+	return 1;
+}
+__setup("fbfix", enable_fbcon_fix);
+
 static int tegra_dc_probe(struct platform_device *ndev)
 {
 	struct tegra_dc *dc;
@@ -2938,7 +2945,11 @@ static int tegra_dc_probe(struct platform_device *ndev)
 	int i;
 
 	static int num_probed = 0;
-	if (++num_probed > 1) return -ENOENT;
+	num_probed++;
+	if (use_fbcon_fix && num_probed > 1) {
+		dev_err(&ndev->dev, "skipped device, fbcon fix enabled\n");
+		return -ENOENT;
+	}
 
 	if (!np && !ndev->dev.platform_data) {
 		dev_err(&ndev->dev, "no platform data\n");

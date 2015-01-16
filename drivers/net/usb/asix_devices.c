@@ -404,6 +404,9 @@ out:
 
 }
 
+static void asix_poll_controller(struct net_device *dev) {
+}
+
 static const struct net_device_ops ax88772_netdev_ops = {
 	.ndo_open		= usbnet_open,
 	.ndo_stop		= usbnet_stop,
@@ -414,6 +417,7 @@ static const struct net_device_ops ax88772_netdev_ops = {
 	.ndo_validate_addr	= eth_validate_addr,
 	.ndo_do_ioctl		= asix_ioctl,
 	.ndo_set_rx_mode        = asix_set_multicast,
+	.ndo_poll_controller	= asix_poll_controller,
 };
 
 static int ax88772_bind(struct usbnet *dev, struct usb_interface *intf)
