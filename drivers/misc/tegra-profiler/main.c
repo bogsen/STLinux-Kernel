@@ -1,7 +1,7 @@
 /*
  * drivers/misc/tegra-profiler/main.c
  *
- * Copyright (c) 2014, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2015, NVIDIA CORPORATION.  All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -85,6 +85,8 @@ static int start(void)
 		return -EBUSY;
 	}
 
+	preempt_disable();
+
 	if (!atomic_cmpxchg(&ctx.started, 0, 1)) {
 		if (ctx.pmu) {
 			err = ctx.pmu->enable();
@@ -117,16 +119,21 @@ static int start(void)
 		}
 	}
 
+	preempt_enable();
 	return 0;
 
 errout:
 	atomic_set(&ctx.started, 0);
 	tegra_profiler_unlock();
+	preempt_enable();
+
 	return err;
 }
 
 static void stop(void)
 {
+	preempt_disable();
+
 	if (atomic_cmpxchg(&ctx.started, 1, 0)) {
 		quadd_hrt_stop();
 
@@ -143,6 +150,8 @@ static void stop(void)
 
 		tegra_profiler_unlock();
 	}
+
+	preempt_enable();
 }
 
 static inline int is_event_supported(struct source_info *si, int event)
@@ -167,26 +176,20 @@ validate_freq(unsigned int freq)
 static int
 set_parameters(struct quadd_parameters *p, uid_t *debug_app_uid)
 {
-	int i, err;
+	int i, err, uid = 0;
 	int pmu_events_id[QUADD_MAX_COUNTERS];
 	int pl310_events_id;
 	int nr_pmu = 0, nr_pl310 = 0;
-	int uid = 0;
 	struct task_struct *task;
 	unsigned int extra;
+	u64 *low_addr_p;
 
 	if (!validate_freq(p->freq)) {
 		pr_err("%s: incorrect frequency: %u\n", __func__, p->freq);
 		return -EINVAL;
 	}
 
-	ctx.param.freq = p->freq;
-	ctx.param.ma_freq = p->ma_freq;
-	ctx.param.backtrace = p->backtrace;
-	ctx.param.use_freq = p->use_freq;
-	ctx.param.system_wide = p->system_wide;
-	ctx.param.power_rate_freq = p->power_rate_freq;
-	ctx.param.debug_samples = p->debug_samples;
+	ctx.param = *p;
 
 	for (i = 0; i < ARRAY_SIZE(p->reserved); i++)
 		ctx.param.reserved[i] = p->reserved[i];
@@ -194,6 +197,8 @@ set_parameters(struct quadd_parameters *p, uid_t *debug_app_uid)
 	/* Currently only one process */
 	if (p->nr_pids != 1)
 		return -EINVAL;
+
+	p->package_name[sizeof(p->package_name) - 1] = '\0';
 
 	rcu_read_lock();
 	task = pid_task(find_vpid(p->pids[0]), PIDTYPE_PID);
@@ -295,7 +300,13 @@ set_parameters(struct quadd_parameters *p, uid_t *debug_app_uid)
 	if (extra & QUADD_PARAM_EXTRA_BT_MIXED)
 		pr_info("unwinding: mixed mode\n");
 
-	quadd_unwind_start(task);
+	low_addr_p = (u64 *)&p->reserved[QUADD_PARAM_IDX_BT_LOWER_BOUND];
+	ctx.hrt->low_addr = (unsigned long)*low_addr_p;
+	pr_info("bt lower bound: %#lx\n", ctx.hrt->low_addr);
+
+	err = quadd_unwind_start(task);
+	if (err)
+		return err;
 
 	pr_info("New parameters have been applied\n");
 
@@ -428,6 +439,7 @@ static void get_capabilities(struct quadd_comm_cap *cap)
 	extra |= QUADD_COMM_CAP_EXTRA_SPECIAL_ARCH_MMAP;
 	extra |= QUADD_COMM_CAP_EXTRA_UNWIND_MIXED;
 	extra |= QUADD_COMM_CAP_EXTRA_UNW_ENTRY_TYPE;
+	extra |= QUADD_COMM_CAP_EXTRA_RB_MMAP_OP;
 
 	if (ctx.hrt->tc)
 		extra |= QUADD_COMM_CAP_EXTRA_ARCH_TIMER;
@@ -452,13 +464,13 @@ void quadd_get_state(struct quadd_module_state *state)
 
 static int
 set_extab(struct quadd_extables *extabs,
-	  struct quadd_extabs_mmap *mmap)
+	  struct quadd_mmap_area *mmap)
 {
 	return quadd_unwind_set_extab(extabs, mmap);
 }
 
 static void
-delete_mmap(struct quadd_extabs_mmap *mmap)
+delete_mmap(struct quadd_mmap_area *mmap)
 {
 	quadd_unwind_delete_mmap(mmap);
 }
@@ -509,11 +521,11 @@ static int __init quadd_module_init(void)
 							  QUADD_MAX_COUNTERS);
 		ctx.pmu_info.nr_supported_events = nr_events;
 
-		pr_info("PMU: amount of events: %d\n", nr_events);
+		pr_debug("PMU: amount of events: %d\n", nr_events);
 
 		for (i = 0; i < nr_events; i++)
-			pr_info("PMU event: %s\n",
-				quadd_get_event_str(events[i]));
+			pr_debug("PMU event: %s\n",
+				 quadd_get_event_str(events[i]));
 	}
 
 #ifdef CONFIG_CACHE_L2X0
@@ -534,7 +546,7 @@ static int __init quadd_module_init(void)
 			pr_info("pl310 event: %s\n",
 				quadd_get_event_str(events[i]));
 	} else {
-		pr_info("PL310 not found\n");
+		pr_debug("PL310 not found\n");
 	}
 
 	ctx.hrt = quadd_hrt_init(&ctx);

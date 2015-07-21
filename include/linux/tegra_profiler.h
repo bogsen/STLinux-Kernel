@@ -1,7 +1,7 @@
 /*
  * include/linux/tegra_profiler.h
  *
- * Copyright (c) 2014, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2015, NVIDIA CORPORATION.  All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -19,8 +19,8 @@
 
 #include <linux/ioctl.h>
 
-#define QUADD_SAMPLES_VERSION	30
-#define QUADD_IO_VERSION	13
+#define QUADD_SAMPLES_VERSION	31
+#define QUADD_IO_VERSION	16
 
 #define QUADD_IO_VERSION_DYNAMIC_RB		5
 #define QUADD_IO_VERSION_RB_MAX_FILL_COUNT	6
@@ -31,6 +31,9 @@
 #define QUADD_IO_VERSION_UNWIND_MIXED		11
 #define QUADD_IO_VERSION_EXTABLES_MMAP		12
 #define QUADD_IO_VERSION_ARCH_TIMER_OPT		13
+#define QUADD_IO_VERSION_DATA_MMAP		14
+#define QUADD_IO_VERSION_BT_LOWER_BOUND		15
+#define QUADD_IO_VERSION_STACK_OFFSET		16
 
 #define QUADD_SAMPLE_VERSION_THUMB_MODE_FLAG	17
 #define QUADD_SAMPLE_VERSION_GROUP_SAMPLES	18
@@ -44,6 +47,9 @@
 #define QUADD_SAMPLE_VERSION_SCHED_SAMPLES	28
 #define QUADD_SAMPLE_VERSION_HDR_UNW_METHOD	29
 #define QUADD_SAMPLE_VERSION_HDR_ARCH_TIMER	30
+#define QUADD_SAMPLE_VERSION_STACK_OFFSET	31
+
+#define QUADD_MMAP_HEADER_VERSION		1
 
 #define QUADD_MAX_COUNTERS	32
 #define QUADD_MAX_PROCESS	64
@@ -90,6 +96,11 @@
  * Send exception-handling tables info
  */
 #define IOCTL_SET_EXTAB _IOW(QUADD_IOCTL, 6, struct quadd_extables)
+
+/*
+ * Send ring buffer mmap info
+ */
+#define IOCTL_SET_MMAP_RB _IOW(QUADD_IOCTL, 7, struct quadd_mmap_rb_info)
 
 #define QUADD_CPUMODE_TEGRA_POWER_CLUSTER_LP	(1 << 29)	/* LP CPU */
 #define QUADD_CPUMODE_THUMB			(1 << 30)	/* thumb mode */
@@ -182,6 +193,9 @@ enum {
 
 #define QUADD_SED_UNW_METHOD_SHIFT	1
 #define QUADD_SED_UNW_METHOD_MASK	(0x07 << QUADD_SED_UNW_METHOD_SHIFT)
+
+#define QUADD_SED_STACK_OFFSET_SHIFT	4
+#define QUADD_SED_STACK_OFFSET_MASK	(0xffff << QUADD_SED_STACK_OFFSET_SHIFT)
 
 enum {
 	QUADD_UNW_TYPE_FP = 0,
@@ -293,6 +307,7 @@ struct quadd_debug_data {
 #define QUADD_HDR_UNW_METHOD_MASK	(0x07 << QUADD_HDR_UNW_METHOD_SHIFT)
 
 #define QUADD_HDR_USE_ARCH_TIMER	(1 << 3)
+#define QUADD_HDR_STACK_OFFSET		(1 << 4)
 
 struct quadd_header_data {
 	u16 magic;
@@ -337,6 +352,7 @@ struct quadd_record_data {
 enum {
 	QUADD_PARAM_IDX_SIZE_OF_RB	= 0,
 	QUADD_PARAM_IDX_EXTRA		= 1,
+	QUADD_PARAM_IDX_BT_LOWER_BOUND	= 2,
 };
 
 #define QUADD_PARAM_EXTRA_GET_MMAP		(1 << 0)
@@ -344,6 +360,7 @@ enum {
 #define QUADD_PARAM_EXTRA_BT_UNWIND_TABLES	(1 << 2)
 #define QUADD_PARAM_EXTRA_BT_MIXED		(1 << 3)
 #define QUADD_PARAM_EXTRA_USE_ARCH_TIMER	(1 << 4)
+#define QUADD_PARAM_EXTRA_STACK_OFFSET		(1 << 5)
 
 struct quadd_parameters {
 	u32 freq;
@@ -395,6 +412,7 @@ enum {
 #define QUADD_COMM_CAP_EXTRA_UNWIND_MIXED	(1 << 6)
 #define QUADD_COMM_CAP_EXTRA_UNW_ENTRY_TYPE	(1 << 7)
 #define QUADD_COMM_CAP_EXTRA_ARCH_TIMER		(1 << 8)
+#define QUADD_COMM_CAP_EXTRA_RB_MMAP_OP		(1 << 9)
 
 struct quadd_comm_cap {
 	u32	pmu:1,
@@ -457,6 +475,46 @@ struct quadd_extables {
 
 	u32 reserved[4];	/* reserved fields for future extensions */
 };
+
+struct quadd_mmap_rb_info {
+	u32 cpu_id;
+
+	u64 vm_start;
+	u64 vm_end;
+
+	u32 reserved[4];	/* reserved fields for future extensions */
+};
+
+#define QUADD_MMAP_HEADER_MAGIC		0x33445566
+
+struct quadd_mmap_header {
+	u32 magic;
+	u32 version;
+
+	u32 cpu_id;
+	u32 samples_version;
+
+	u32 reserved[4];	/* reserved fields for future extensions */
+} __aligned(8);
+
+enum {
+	QUADD_RB_STATE_NONE = 0,
+	QUADD_RB_STATE_ACTIVE,
+	QUADD_RB_STATE_STOPPED,
+};
+
+struct quadd_ring_buffer_hdr {
+	u32 state;
+	u32 size;
+
+	u32 pos_read;
+	u32 pos_write;
+
+	u32 max_fill_count;
+	u32 skipped_samples;
+
+	u32 reserved[4];	/* reserved fields for future extensions */
+} __aligned(8);
 
 #pragma pack(pop)
 

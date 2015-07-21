@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2010 Google, Inc.
+ * Copyright (C) 2010-2015 NVIDIA Corporation.  All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -18,11 +19,8 @@ struct fiq_glue_handler {
 	void (*fiq)(struct fiq_glue_handler *h, void *regs, void *svc_sp);
 	void (*resume)(struct fiq_glue_handler *h);
 };
-typedef void (*fiq_return_handler_t)(void);
 
 int fiq_glue_register_handler(struct fiq_glue_handler *handler);
-int fiq_glue_set_return_handler(fiq_return_handler_t fiq_return);
-int fiq_glue_clear_return_handler(fiq_return_handler_t fiq_return);
 
 #ifdef CONFIG_FIQ_GLUE
 void fiq_glue_resume(void);

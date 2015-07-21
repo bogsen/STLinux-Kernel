@@ -4,7 +4,7 @@
  * Copyright (C) 2010 Google, Inc.
  * Author: Erik Gilling <konkers@android.com>
  *
- * Copyright (c) 2010-2014, NVIDIA CORPORATION, All rights reserved.
+ * Copyright (c) 2010-2015, NVIDIA CORPORATION, All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -3184,7 +3184,14 @@ static int tegra_dc_probe(struct platform_device *ndev)
 			dcmode->v_active      = specs.modedb->yres;
 			dcmode->h_front_porch = specs.modedb->right_margin;
 			dcmode->v_front_porch = specs.modedb->lower_margin;
-			tegra_dc_set_mode(dc, dcmode);
+
+			/* Program DC only with supported pclk. If pclk is not
+			 * supported, fall back to default mode.
+			 */
+			if (dcmode->pclk > PICOS2KHZ(tegra_dc_get_out_max_pixclock(dc)) * 1000)
+				tegra_dc_set_fb_mode(dc, &tegra_dc_vga_mode, 0);
+			else
+				tegra_dc_set_mode(dc, dcmode);
 			dc->pdata->fb->xres = dcmode->h_active;
 			dc->pdata->fb->yres = dcmode->v_active;
 		}
@@ -3242,7 +3249,8 @@ static int tegra_dc_probe(struct platform_device *ndev)
 			udelay(10);
 			clk_disable_unprepare(dc->clk);
 		}
-		_tegra_dc_set_default_videomode(dc);
+		if (dc->out->type != TEGRA_DC_OUT_HDMI)
+			_tegra_dc_set_default_videomode(dc);
 		dc->enabled = _tegra_dc_enable(dc);
 
 #if !defined(CONFIG_ARCH_TEGRA_11x_SOC) && !defined(CONFIG_ARCH_TEGRA_14x_SOC)

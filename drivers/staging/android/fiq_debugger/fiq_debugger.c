@@ -4,6 +4,7 @@
  * Serial Debugger Interface accessed through an FIQ interrupt.
  *
  * Copyright (C) 2008 Google, Inc.
+ * Copyright (c) 2012-2015, NVIDIA CORPORATION.  All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -49,7 +50,6 @@
 #define MAX_UNHANDLED_FIQ_COUNT 1000000
 
 #define MAX_FIQ_DEBUGGER_PORTS 4
-
 struct fiq_debugger_state {
 #ifdef CONFIG_FIQ_GLUE
 	struct fiq_glue_handler handler;

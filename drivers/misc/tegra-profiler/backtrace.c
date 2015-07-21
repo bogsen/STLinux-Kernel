@@ -1,7 +1,7 @@
 /*
  * drivers/misc/tegra-profiler/backtrace.c
  *
- * Copyright (c) 2014, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2015, NVIDIA CORPORATION.  All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -25,6 +25,8 @@
 #include "quadd.h"
 #include "backtrace.h"
 #include "eh_unwind.h"
+#include "dwarf_unwind.h"
+#include "hrt.h"
 
 static inline int
 is_thumb_mode(struct pt_regs *regs)
@@ -47,8 +49,8 @@ quadd_user_stack_pointer(struct pt_regs *regs)
 	return user_stack_pointer(regs);
 }
 
-static inline unsigned long
-get_user_frame_pointer(struct pt_regs *regs)
+unsigned long
+quadd_get_user_frame_pointer(struct pt_regs *regs)
 {
 	unsigned long fp;
 
@@ -91,7 +93,9 @@ int
 quadd_callchain_store(struct quadd_callchain *cc,
 		      unsigned long ip, unsigned int type)
 {
-	if (!validate_pc_addr(ip, sizeof(unsigned long))) {
+	unsigned long low_addr = cc->hrt->low_addr;
+
+	if (ip < low_addr || !validate_pc_addr(ip, sizeof(unsigned long))) {
 		cc->unw_rc = QUADD_URC_PC_INCORRECT;
 		return 0;
 	}
@@ -109,6 +113,19 @@ quadd_callchain_store(struct quadd_callchain *cc,
 		cc->ip_32[cc->nr++] = ip;
 
 	return 1;
+}
+
+static int
+is_ex_entry_exist(struct pt_regs *regs,
+		  unsigned long addr,
+		  struct task_struct *task)
+{
+#ifdef CONFIG_ARM64
+	if (!compat_user_mode(regs))
+		return quadd_aarch64_is_ex_entry_exist(regs, addr, task);
+#endif
+
+	return quadd_aarch32_is_ex_entry_exist(regs, addr, task);
 }
 
 static unsigned long __user *
@@ -170,7 +187,7 @@ user_backtrace(struct pt_regs *regs,
 		return NULL;
 
 	if (cc->unw_method == QUADD_UNW_METHOD_MIXED &&
-	    quadd_is_ex_entry_exist(regs, value_lr, task))
+	    is_ex_entry_exist(regs, value_lr, task))
 		return NULL;
 
 	if (fp_prev <= tail)
@@ -199,7 +216,7 @@ get_user_callchain_fp(struct pt_regs *regs,
 
 	sp = quadd_user_stack_pointer(regs);
 	pc = instruction_pointer(regs);
-	fp = get_user_frame_pointer(regs);
+	fp = quadd_get_user_frame_pointer(regs);
 
 	if (fp == 0 || fp < sp || fp & 0x3)
 		return 0;
@@ -357,7 +374,7 @@ user_backtrace_compat(struct pt_regs *regs,
 		return NULL;
 
 	if (cc->unw_method == QUADD_UNW_METHOD_MIXED &&
-	    quadd_is_ex_entry_exist(regs, value_lr, task))
+	    is_ex_entry_exist(regs, value_lr, task))
 		return NULL;
 
 	if (fp_prev <= tail)
@@ -386,7 +403,7 @@ get_user_callchain_fp_compat(struct pt_regs *regs,
 
 	sp = quadd_user_stack_pointer(regs);
 	pc = instruction_pointer(regs);
-	fp = get_user_frame_pointer(regs);
+	fp = quadd_get_user_frame_pointer(regs);
 
 	if (fp == 0 || fp < sp || fp & 0x3)
 		return 0;
@@ -516,6 +533,18 @@ __get_user_callchain_fp(struct pt_regs *regs,
 }
 
 static unsigned int
+get_user_callchain_ut(struct pt_regs *regs,
+		      struct quadd_callchain *cc,
+		      struct task_struct *task)
+{
+#ifdef CONFIG_ARM64
+	if (!compat_user_mode(regs))
+		return quadd_aarch64_get_user_callchain_ut(regs, cc, task);
+#endif
+	return quadd_aarch32_get_user_callchain_ut(regs, cc, task);
+}
+
+static unsigned int
 get_user_callchain_mixed(struct pt_regs *regs,
 		      struct quadd_callchain *cc,
 		      struct task_struct *task)
@@ -525,7 +554,7 @@ get_user_callchain_mixed(struct pt_regs *regs,
 	do {
 		nr_prev = cc->nr;
 
-		quadd_get_user_callchain_ut(regs, cc, task);
+		get_user_callchain_ut(regs, cc, task);
 		if (nr_prev > 0 && cc->nr == nr_prev)
 			break;
 
@@ -570,7 +599,7 @@ quadd_get_user_callchain(struct pt_regs *regs,
 		break;
 
 	case QUADD_UNW_METHOD_EHT:
-		quadd_get_user_callchain_ut(regs, cc, task);
+		get_user_callchain_ut(regs, cc, task);
 		break;
 
 	case QUADD_UNW_METHOD_MIXED:

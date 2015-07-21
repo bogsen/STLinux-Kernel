@@ -4359,7 +4359,7 @@ static int tegra12_use_dfll_cb(const char *arg, const struct kernel_param *kp)
 {
 	int ret = 0;
 	unsigned int old_use_dfll;
-	if (CONFIG_TEGRA_USE_DFLL_RANGE != TEGRA_USE_DFLL_CDEV_CNTRL) {
+	if (tegra_override_dfll_range != TEGRA_USE_DFLL_CDEV_CNTRL) {
 		old_use_dfll = use_dfll;
 		param_set_int(arg, kp);
 		ret =  tegra_clk_dfll_range_control(use_dfll);
@@ -8377,6 +8377,7 @@ struct clk tegra_list_clks[] = {
 	SHARED_EMC_CLK("override.emc", "override.emc",	NULL,	&tegra_clk_emc, NULL, 0, SHARED_OVERRIDE, 0),
 	SHARED_EMC_CLK("vic.emc",	"tegra_vic03.0",	"emc",  &tegra_clk_emc, NULL, 0, 0, 0),
 	SHARED_EMC_CLK("battery.emc",	"battery_edp",	"emc",	&tegra_clk_emc, NULL, 0, SHARED_CEILING, 0),
+	SHARED_EMC_CLK("pcie.emc",	"tegra_pcie",		"emc",	&tegra_clk_emc, NULL, 0, 0, 0),
 	SHARED_LIMIT("floor.emc",	"floor.emc",	NULL,	&tegra_clk_emc, NULL,  0, 0),
 	SHARED_LIMIT("floor.profile.emc", "profile.emc", "floor", &tegra_clk_emc, NULL,  0, 0),
 
@@ -8619,9 +8620,14 @@ struct clk_duplicate tegra_clk_duplicates[] = {
 	CLK_DUPLICATE("csi", "tegra_vi.0", "csi"),
 	CLK_DUPLICATE("csi", "tegra_vi.1", "csi"),
 	CLK_DUPLICATE("csus", "tegra_vi.0", "csus"),
+	CLK_DUPLICATE("csus", "tegra_vi.1", "csus"),
+	CLK_DUPLICATE("vim2_clk", "tegra_vi.0", "vim2_clk"),
 	CLK_DUPLICATE("vim2_clk", "tegra_vi.1", "vim2_clk"),
 	CLK_DUPLICATE("cilab", "tegra_vi.0", "cilab"),
+	CLK_DUPLICATE("cilab", "tegra_vi.1", "cilab"),
+	CLK_DUPLICATE("cilcd", "tegra_vi.0", "cilcd"),
 	CLK_DUPLICATE("cilcd", "tegra_vi.1", "cilcd"),
+	CLK_DUPLICATE("cile", "tegra_vi.0", "cile"),
 	CLK_DUPLICATE("cile", "tegra_vi.1", "cile"),
 	CLK_DUPLICATE("i2s0", NULL, "i2s0"),
 	CLK_DUPLICATE("i2s1", NULL, "i2s1"),
@@ -8889,7 +8895,7 @@ static void __init tegra12_dfll_cpu_late_init(struct clk *c)
 	if (!ret) {
 		c->state = OFF;
 		if (tegra_platform_is_silicon()) {
-			if (CONFIG_TEGRA_USE_DFLL_RANGE !=
+			if (tegra_override_dfll_range !=
 					TEGRA_USE_DFLL_CDEV_CNTRL)
 				use_dfll = CONFIG_TEGRA_USE_DFLL_RANGE;
 #ifdef CONFIG_ARCH_TEGRA_13x_SOC

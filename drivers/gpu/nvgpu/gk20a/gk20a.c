@@ -914,11 +914,20 @@ static int gk20a_pm_finalize_poweron(struct device *dev)
 		goto done;
 	}
 
+	wait_event(g->pmu.boot_wq, g->pmu.pmu_state == PMU_STATE_STARTED);
+
 	gk20a_channel_resume(g);
 	set_user_nice(current, nice_value);
 
 	gk20a_scale_resume(pdev);
 
+#ifdef CONFIG_INPUT_CFBOOST
+       if (!g->boost_added) {
+               gk20a_dbg_info("add touch boost");
+               cfb_add_device(dev);
+               g->boost_added = true;
+       }
+#endif
 done:
 	return err;
 }
@@ -1462,10 +1471,7 @@ static int gk20a_probe(struct platform_device *dev)
 					&gk20a->timeouts_enabled);
 	gk20a_pmu_debugfs_init(dev);
 #endif
-
-#ifdef CONFIG_INPUT_CFBOOST
-	cfb_add_device(&dev->dev);
-#endif
+	init_waitqueue_head(&gk20a->pmu.boot_wq);
 
 	gk20a_init_gr(gk20a);
 
@@ -1478,7 +1484,8 @@ static int __exit gk20a_remove(struct platform_device *dev)
 	gk20a_dbg_fn("");
 
 #ifdef CONFIG_INPUT_CFBOOST
-	cfb_remove_device(&dev->dev);
+	if (g->boost_added)
+		cfb_remove_device(&dev->dev);
 #endif
 
 	if (g->remove_support)

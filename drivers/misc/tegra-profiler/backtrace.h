@@ -1,7 +1,7 @@
 /*
  * drivers/misc/tegra-profiler/backtrace.h
  *
- * Copyright (c) 2014, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2015, NVIDIA CORPORATION.  All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -25,6 +25,8 @@
 #define QUADD_UNW_TYPES_SIZE \
 	DIV_ROUND_UP(QUADD_MAX_STACK_DEPTH * 4, sizeof(u32) * BITS_PER_BYTE)
 
+struct quadd_hrt_ctx;
+
 struct quadd_callchain {
 	int nr;
 
@@ -43,6 +45,8 @@ struct quadd_callchain {
 	unsigned long curr_sp;
 	unsigned long curr_fp;
 	unsigned long curr_pc;
+
+	struct quadd_hrt_ctx *hrt;
 };
 
 struct quadd_ctx;
@@ -62,6 +66,9 @@ unsigned long
 quadd_user_stack_pointer(struct pt_regs *regs);
 
 unsigned long
+quadd_get_user_frame_pointer(struct pt_regs *regs);
+
+unsigned long
 quadd_user_link_register(struct pt_regs *regs);
 
 static inline int
@@ -77,6 +84,17 @@ static inline int
 validate_pc_addr(unsigned long addr, unsigned long nbytes)
 {
 	return addr && addr < TASK_SIZE - nbytes;
+}
+
+static inline int
+validate_stack_addr(unsigned long addr,
+		    struct vm_area_struct *vma,
+		    unsigned long nbytes)
+{
+	if (addr & 0x03)
+		return 0;
+
+	return is_vma_addr(addr, vma, nbytes);
 }
 
 #endif  /* __QUADD_BACKTRACE_H */

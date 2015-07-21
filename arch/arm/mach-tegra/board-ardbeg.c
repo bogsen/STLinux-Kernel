@@ -1,7 +1,7 @@
 /*
  * arch/arm/mach-tegra/board-ardbeg.c
  *
- * Copyright (c) 2013-2014, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2013-2015, NVIDIA CORPORATION.  All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -430,7 +430,12 @@ static void __init ardbeg_uart_init(void)
 			return;
 
 #ifdef CONFIG_TEGRA_FIQ_DEBUGGER
-		tegra_serial_debug_init(TEGRA_UARTD_BASE, INT_WDT_CPU, NULL, -1, -1);
+#if !defined(CONFIG_TRUSTED_FOUNDATIONS) && \
+	defined(CONFIG_ARCH_TEGRA_12x_SOC) && defined(CONFIG_FIQ_DEBUGGER)
+	tegra_serial_debug_init(TEGRA_UARTD_BASE, INT_WDT_AVP, NULL, -1, -1);
+#else
+	tegra_serial_debug_init(TEGRA_UARTD_BASE, INT_WDT_CPU, NULL, -1, -1);
+#endif
 #else
 		platform_device_register(uart_console_debug_device);
 #endif
@@ -1280,7 +1285,6 @@ static void __init edp_init(void)
 			break;
 	case BOARD_PM358:
 	case BOARD_PM359:
-	case BOARD_PM375:
 	case BOARD_PM377:
 			laguna_edp_init();
 			break;
@@ -1288,6 +1292,7 @@ static void __init edp_init(void)
 	case BOARD_E2548:
 			loki_edp_init();
 			break;
+	case BOARD_PM375:
 	default:
 			ardbeg_edp_init();
 			break;
@@ -1342,6 +1347,46 @@ static struct tegra_io_dpd pexclk2_io = {
 	.io_dpd_reg_index	= 0,
 	.io_dpd_bit		= 6,
 };
+
+#ifdef CONFIG_NV_SENSORHUB
+static int __init tegra_jetson_sensorhub_init(void)
+{
+
+	if (gpio_request(SENSOR_HUB_RST, "sensor_hub_rst"))
+		pr_warn("%s:%d: gpio_request failed", __func__, __LINE__);
+
+	if (gpio_request(SENSOR_HUB_BOOT0, "sensor_hub_boot0"))
+		pr_warn("%s:%d: gpio_request failed", __func__, __LINE__);
+
+	if (gpio_direction_output(SENSOR_HUB_BOOT0, 0))
+		pr_warn("%s:%d: gpio_direction_output failed",
+			__func__, __LINE__);
+
+	if (gpio_direction_output(SENSOR_HUB_RST, 0))
+		pr_warn("%s:%d: gpio_direction_output failed",
+			__func__, __LINE__);
+
+	/* SENSOR_HUB_RESET */
+	gpio_set_value(SENSOR_HUB_RST, 0);
+	/* Boot0 is useless in Kalamos HW00 board  - Drive low */
+	gpio_set_value(SENSOR_HUB_BOOT0, 0);
+	msleep(1000);
+	gpio_set_value(SENSOR_HUB_RST, 1);
+
+	if (gpio_export(SENSOR_HUB_RST, 1))
+		pr_warn("%s:%d: gpio_export failed", __func__, __LINE__);
+
+	if (gpio_export(SENSOR_HUB_BOOT0, 1))
+		pr_warn("%s:%d: gpio_export failed", __func__, __LINE__);
+
+	pr_info("%s: MCU init done\n", __func__);
+
+	return 0;
+
+}
+
+late_initcall(tegra_jetson_sensorhub_init);
+#endif
 
 static void __init tegra_ardbeg_late_init(void)
 {
