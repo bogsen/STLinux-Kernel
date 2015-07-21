@@ -1,7 +1,7 @@
 /*
  * drivers/misc/tegra-profiler/comm.c
  *
- * Copyright (c) 2015, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2013-2015, NVIDIA CORPORATION.  All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -54,8 +54,6 @@ struct quadd_comm_ctx {
 	int nr_users;
 
 	int params_ok;
-	pid_t process_pid;
-	uid_t debug_app_uid;
 
 	wait_queue_head_t read_wait;
 
@@ -251,31 +249,6 @@ static struct quadd_comm_data_interface comm_data = {
 	.is_active = is_active,
 };
 
-static int check_access_permission(void)
-{
-	struct task_struct *task;
-
-	if (capable(CAP_SYS_ADMIN))
-		return 0;
-
-	if (!comm_ctx.params_ok || comm_ctx.process_pid == 0)
-		return -EACCES;
-
-	rcu_read_lock();
-	task = pid_task(find_vpid(comm_ctx.process_pid), PIDTYPE_PID);
-	rcu_read_unlock();
-	if (!task)
-		return -EACCES;
-
-	if (current_fsuid() != task_uid(task) &&
-	    task_uid(task) != comm_ctx.debug_app_uid) {
-		pr_err("Permission denied, owner/task uids: %u/%u\n",
-			   current_fsuid(), task_uid(task));
-		return -EACCES;
-	}
-	return 0;
-}
-
 static struct quadd_mmap_area *
 find_mmap(unsigned long vm_start)
 {
@@ -370,6 +343,7 @@ init_mmap_hdr(struct quadd_mmap_rb_info *mmap_rb,
 	mmap_hdr->magic = QUADD_MMAP_HEADER_MAGIC;
 	mmap_hdr->version = QUADD_MMAP_HEADER_VERSION;
 	mmap_hdr->cpu_id = cpu_id;
+	mmap_hdr->samples_version = QUADD_SAMPLES_VERSION;
 
 	rb_hdr = (struct quadd_ring_buffer_hdr *)(mmap_hdr + 1);
 	rb->rb_hdr = rb_hdr;
@@ -440,25 +414,25 @@ device_ioctl(struct file *file,
 	     unsigned long ioctl_param)
 {
 	int err = 0;
-	u64 *mmap_vm_start;
 	struct quadd_mmap_area *mmap;
 	struct quadd_parameters *user_params;
 	struct quadd_comm_cap cap;
 	struct quadd_module_state state;
 	struct quadd_module_version versions;
-	struct quadd_extables extabs;
+	struct quadd_sections extabs;
 	struct quadd_mmap_rb_info mmap_rb;
+
+	mutex_lock(&comm_ctx.io_mutex);
 
 	if (ioctl_num != IOCTL_SETUP &&
 	    ioctl_num != IOCTL_GET_CAP &&
 	    ioctl_num != IOCTL_GET_STATE &&
 	    ioctl_num != IOCTL_GET_VERSION) {
-		err = check_access_permission();
-		if (err)
-			return err;
+		if (!comm_ctx.params_ok) {
+			err = -EACCES;
+			goto error_out;
+		}
 	}
-
-	mutex_lock(&comm_ctx.io_mutex);
 
 	switch (ioctl_num) {
 	case IOCTL_SETUP:
@@ -467,6 +441,7 @@ device_ioctl(struct file *file,
 			err = -EBUSY;
 			goto error_out;
 		}
+		comm_ctx.params_ok = 0;
 
 		user_params = vmalloc(sizeof(*user_params));
 		if (!user_params) {
@@ -482,15 +457,12 @@ device_ioctl(struct file *file,
 			goto error_out;
 		}
 
-		err = comm_ctx.control->set_parameters(user_params,
-						       &comm_ctx.debug_app_uid);
+		err = comm_ctx.control->set_parameters(user_params);
 		if (err) {
 			pr_err("error: setup failed\n");
 			vfree(user_params);
 			goto error_out;
 		}
-		comm_ctx.params_ok = 1;
-		comm_ctx.process_pid = user_params->pids[0];
 
 		if (user_params->reserved[QUADD_PARAM_IDX_SIZE_OF_RB] == 0) {
 			pr_err("error: too old version of daemon\n");
@@ -498,6 +470,8 @@ device_ioctl(struct file *file,
 			err = -EINVAL;
 			goto error_out;
 		}
+
+		comm_ctx.params_ok = 1;
 
 		pr_info("setup success: freq/mafreq: %u/%u, backtrace: %d, pid: %d\n",
 			user_params->freq,
@@ -550,13 +524,6 @@ device_ioctl(struct file *file,
 
 	case IOCTL_START:
 		if (!atomic_cmpxchg(&comm_ctx.active, 0, 1)) {
-			if (!comm_ctx.params_ok) {
-				pr_err("error: params failed\n");
-				atomic_set(&comm_ctx.active, 0);
-				err = -EFAULT;
-				goto error_out;
-			}
-
 			err = comm_ctx.control->start();
 			if (err) {
 				pr_err("error: start failed\n");
@@ -576,19 +543,22 @@ device_ioctl(struct file *file,
 		}
 		break;
 
-	case IOCTL_SET_EXTAB:
+	case IOCTL_SET_SECTIONS_INFO:
 		if (copy_from_user(&extabs, (void __user *)ioctl_param,
 				   sizeof(extabs))) {
-			pr_err("error: set_extab failed\n");
+			pr_err("error: set_sections_info failed\n");
 			err = -EFAULT;
 			goto error_out;
 		}
 
-		mmap_vm_start = (u64 *)
-			&extabs.reserved[QUADD_EXT_IDX_MMAP_VM_START];
+		pr_debug("%s: user_mmap_start: %#llx, sections vma: %#llx - %#llx\n",
+			 __func__,
+			 (unsigned long long)extabs.user_mmap_start,
+			 (unsigned long long)extabs.vm_start,
+			 (unsigned long long)extabs.vm_end);
 
 		spin_lock(&comm_ctx.mmaps_lock);
-		mmap = find_mmap((unsigned long)*mmap_vm_start);
+		mmap = find_mmap(extabs.user_mmap_start);
 		if (!mmap) {
 			pr_err("%s: error: mmap is not found\n", __func__);
 			err = -ENXIO;
@@ -602,7 +572,7 @@ device_ioctl(struct file *file,
 		err = comm_ctx.control->set_extab(&extabs, mmap);
 		spin_unlock(&comm_ctx.mmaps_lock);
 		if (err) {
-			pr_err("error: set_extab\n");
+			pr_err("error: set_sections_info\n");
 			goto error_out;
 		}
 		break;
@@ -821,7 +791,6 @@ static int comm_init(void)
 	atomic_set(&comm_ctx.active, 0);
 
 	comm_ctx.params_ok = 0;
-	comm_ctx.process_pid = 0;
 	comm_ctx.nr_users = 0;
 
 	init_waitqueue_head(&comm_ctx.read_wait);

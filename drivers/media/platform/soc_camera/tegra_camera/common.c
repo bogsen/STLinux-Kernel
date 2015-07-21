@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2013-2015, NVIDIA CORPORATION.  All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -179,7 +179,6 @@ static void tegra_camera_deactivate(struct tegra_camera_dev *cam)
 {
 	struct tegra_camera_ops *cam_ops = cam->ops;
 
-
 	if (cam_ops->clks_disable)
 		cam_ops->clks_disable(cam);
 
@@ -199,6 +198,7 @@ static void tegra_camera_deactivate(struct tegra_camera_dev *cam)
 	nvhost_module_idle_ext(cam->ndev);
 
 	cam->sof = 0;
+	cam->cal_done = 0;
 }
 
 static int tegra_camera_capture_frame(struct tegra_camera_dev *cam)
@@ -217,10 +217,15 @@ static int tegra_camera_capture_frame(struct tegra_camera_dev *cam)
 
 	cam->ops->incr_syncpts(cam);
 
+	/* MIPI CSI pads calibration after starting capture */
+	if (cam->ops->mipi_calibration && !cam->cal_done) {
+		err = cam->ops->mipi_calibration(cam);
+		if (!err)
+			cam->cal_done = 1;
+	}
+
 	while (retry) {
 		err = cam->ops->capture_start(cam, buf);
-		/* Capturing succeed, stop capturing */
-		cam->ops->capture_stop(cam, port);
 		if (err) {
 			retry--;
 
@@ -478,8 +483,10 @@ static void tegra_camera_videobuf_queue(struct vb2_buffer *vb)
 
 	spin_lock_irq(&cam->videobuf_queue_lock);
 	list_add_tail(&buf->queue, &cam->capture);
-	schedule_work(&cam->work);
 	spin_unlock_irq(&cam->videobuf_queue_lock);
+
+	if (vb2_is_streaming(vb->vb2_queue))
+		schedule_work(&cam->work);
 }
 
 static void tegra_camera_videobuf_release(struct vb2_buffer *vb)
@@ -518,6 +525,19 @@ static int tegra_camera_videobuf_init(struct vb2_buffer *vb)
 	return 0;
 }
 
+static int tegra_camera_start_streaming(struct vb2_queue *q, unsigned int count)
+{
+	struct soc_camera_device *icd = container_of(q,
+						     struct soc_camera_device,
+						     vb2_vidq);
+	struct soc_camera_host *ici = to_soc_camera_host(icd->parent);
+	struct tegra_camera_dev *cam = ici->priv;
+
+	schedule_work(&cam->work);
+
+	return 0;
+}
+
 static int tegra_camera_stop_streaming(struct vb2_queue *q)
 {
 	struct soc_camera_device *icd = container_of(q,
@@ -525,27 +545,12 @@ static int tegra_camera_stop_streaming(struct vb2_queue *q)
 						     vb2_vidq);
 	struct soc_camera_host *ici = to_soc_camera_host(icd->parent);
 	struct tegra_camera_dev *cam = ici->priv;
-	struct list_head *buf_head, *tmp;
-
+	struct soc_camera_subdev_desc *ssdesc = &icd->sdesc->subdev_desc;
+	struct tegra_camera_platform_data *pdata = ssdesc->drv_priv;
+	int port = pdata->port;
 
 	mutex_lock(&cam->work_mutex);
-
-	spin_lock_irq(&cam->videobuf_queue_lock);
-	list_for_each_safe(buf_head, tmp, &cam->capture) {
-		struct tegra_camera_buffer *buf = container_of(buf_head,
-				struct tegra_camera_buffer,
-				queue);
-		if (buf->icd == icd)
-			list_del_init(buf_head);
-	}
-	spin_unlock_irq(&cam->videobuf_queue_lock);
-
-	if (cam->active) {
-		struct tegra_camera_buffer *buf = to_tegra_vb(cam->active);
-		if (buf->icd == icd)
-			cam->active = NULL;
-	}
-
+	cam->ops->capture_stop(cam, port);
 	mutex_unlock(&cam->work_mutex);
 
 	return 0;
@@ -559,6 +564,7 @@ static struct vb2_ops tegra_camera_videobuf_ops = {
 	.buf_init	= tegra_camera_videobuf_init,
 	.wait_prepare	= soc_camera_unlock,
 	.wait_finish	= soc_camera_lock,
+	.start_streaming = tegra_camera_start_streaming,
 	.stop_streaming	= tegra_camera_stop_streaming,
 };
 

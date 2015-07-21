@@ -100,6 +100,15 @@ config VIDEO_AR0330
 	  maximum of 3MP resolution with slave mode
 	  capability.
 
+config VIDEO_AR1335
+        tristate "AR1335 camera sensor support"
+        depends on I2C && ARCH_TEGRA
+        ---help---
+          This is a driver for the AR1335 camera sensor
+          for use with the tegra isp.  The sensor has a
+          maximum resolution of 4208x3120 with 4 MIPI
+          lane configuration.
+
 config VIDEO_IMX132
         tristate "IMX132 camera sensor support"
         depends on I2C && ARCH_TEGRA
@@ -126,6 +135,13 @@ config VIDEO_OV7695
         ---help---
           This is a driver for the OV7695 YUV camera sensor device
           This sensor has external ISP, it isn't using tegra ISP.
+
+config VIDEO_OV4689
+        tristate "OV4689 camera sensor support"
+        depends on I2C && ARCH_TEGRA
+        ---help---
+          This is a driver for the OV4689 camera sensor
+          for use with the tegra isp.
 
 config TORCH_SSL3250A
         tristate "SSL3250A flash/torch support"
@@ -219,6 +235,13 @@ config VIDEO_IMX179
         depends on I2C && ARCH_TEGRA
         ---help---
           This is a driver for the IMX179 camera sensor
+          for use with the tegra isp.
+
+config VIDEO_IMX185
+        tristate "IMX185 camera sensor support"
+        depends on I2C && ARCH_TEGRA
+        ---help---
+          This is a driver for the IMX185 camera sensor
           for use with the tegra isp.
 
 config VIDEO_CAMERA

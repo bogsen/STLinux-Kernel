@@ -1,7 +1,7 @@
 /*
  * xhci-tegra.c - Nvidia xHCI host controller driver
  *
- * Copyright (c) 2013-2014, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2013-2015, NVIDIA CORPORATION.  All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -131,6 +131,11 @@ struct log_entry {
 	u8 owner;
 };
 
+enum build_info_log {
+	LOG_NONE = 0,
+	LOG_MEMORY
+};
+
 /* Usb3 Firmware Cfg Table */
 struct cfgtbl {
 	u32 boot_loadaddr_in_imem;
@@ -181,7 +186,9 @@ struct cfgtbl {
 	u32 SS_low_power_entry_timeout;
 	u8 num_hsic_port;
 	u8 ss_portmap;
-	u8 padding[138]; /* padding bytes to makeup 256-bytes cfgtbl */
+	u8 build_log:4;
+	u8 build_type:4;
+	u8 padding[137]; /* padding bytes to makeup 256-bytes cfgtbl */
 };
 
 struct xusb_save_regs {
@@ -2482,8 +2489,10 @@ static int load_firmware(struct tegra_xhci_hcd *tegra, bool resetARU)
 	}
 
 	/* update the phys_log_buffer and total_entries here */
-	cfg_tbl->phys_addr_log_buffer = tegra->log.phys_addr;
-	cfg_tbl->total_log_entries = FW_LOG_COUNT;
+	if (test_bit(FW_LOG_CONTEXT_VALID, &tegra->log.flags)) {
+		cfg_tbl->phys_addr_log_buffer = tegra->log.phys_addr;
+		cfg_tbl->total_log_entries = FW_LOG_COUNT;
+	}
 
 	phys_addr_lo = tegra->firmware.dma;
 	phys_addr_lo += sizeof(struct cfgtbl);
@@ -3504,10 +3513,12 @@ static int tegra_xhci_bus_suspend(struct usb_hcd *hcd)
 	tegra_xhci_hs_wake_on_interrupts(tegra->bdata->portmap, true);
 
 	/* In ELPG, firmware log context is gone. Rewind shared log buffer. */
-	if (fw_log_wait_empty_timeout(tegra, 100))
-		xhci_warn(xhci, "%s still has logs\n", __func__);
-	tegra->log.dequeue = tegra->log.virt_addr;
-	tegra->log.seq = 0;
+	if (test_bit(FW_LOG_CONTEXT_VALID, &tegra->log.flags)) {
+		if (fw_log_wait_empty_timeout(tegra, 100))
+			xhci_warn(xhci, "%s still has logs\n", __func__);
+		tegra->log.dequeue = tegra->log.virt_addr;
+		tegra->log.seq = 0;
+	}
 
 done:
 	/* pads are disabled only if usb2 root hub in xusb is idle */
@@ -3608,7 +3619,8 @@ static irqreturn_t tegra_xhci_irq(struct usb_hcd *hcd)
 		iret = xhci_irq(hcd);
 	spin_unlock(&tegra->lock);
 
-	wake_up_interruptible(&tegra->log.intr_wait);
+	if (test_bit(FW_LOG_CONTEXT_VALID, &tegra->log.flags))
+		wake_up_interruptible(&tegra->log.intr_wait);
 
 	return iret;
 }
@@ -3690,9 +3702,6 @@ tegra_xhci_suspend(struct platform_device *pdev,
 		return -EBUSY;
 	}
 	mutex_unlock(&tegra->sync_lock);
-
-	tegra_xhci_ss_wake_on_interrupts(tegra->bdata->portmap, false);
-	tegra_xhci_hs_wake_on_interrupts(tegra->bdata->portmap, false);
 
 	/* enable_irq_wake for ss ports */
 	ret = enable_irq_wake(tegra->padctl_irq);
@@ -3796,6 +3805,9 @@ static void init_filesystem_firmware_done(const struct firmware *fw,
 	fw_size = fw_cfgtbl->fwimg_len;
 	dev_info(&pdev->dev, "Firmware File: %s (%d Bytes)\n",
 			firmware_file, fw_size);
+
+	if (fw_cfgtbl->build_log == LOG_MEMORY)
+		fw_log_init(tegra);
 
 	fw_data = dma_alloc_coherent(&pdev->dev, fw_size,
 			&fw_dma, GFP_KERNEL);
@@ -4267,7 +4279,7 @@ static int hsic_power_create_file(struct tegra_xhci_hcd *tegra)
 		tegra->hsic_power_attr[p].show = hsic_power_show;
 		tegra->hsic_power_attr[p].store = hsic_power_store;
 		tegra->hsic_power_attr[p].attr.mode = (S_IRUGO | S_IWUSR);
-		sysfs_attr_init(&tegra->hsic_power_attr[p]);
+		sysfs_attr_init(&tegra->hsic_power_attr[p].attr);
 
 		err = device_create_file(dev, &tegra->hsic_power_attr[p]);
 		if (err) {
@@ -4284,9 +4296,6 @@ static int hsic_power_create_file(struct tegra_xhci_hcd *tegra)
 static int tegra_xhci_probe(struct platform_device *pdev)
 {
 	struct tegra_xhci_hcd *tegra;
-	struct resource	*res;
-	unsigned pad;
-	u32 val;
 	int ret;
 	int irq;
 	const struct tegra_xusb_soc_config *soc_config;
@@ -4374,6 +4383,34 @@ static int tegra_xhci_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "failed to map ipfs\n");
 		return ret;
 	}
+
+	ret = init_firmware(tegra);
+	if (ret < 0) {
+		dev_err(&pdev->dev, "failed to init firmware\n");
+		ret = -ENODEV;
+		goto err_deinit_firmware_log;
+	}
+
+	return 0;
+
+err_deinit_firmware_log:
+	fw_log_deinit(tegra);
+
+	return ret;
+}
+
+static int tegra_xhci_probe2(struct tegra_xhci_hcd *tegra)
+{
+	struct platform_device *pdev = tegra->pdev;
+	const struct hc_driver *driver;
+	int ret;
+	struct resource	*res;
+	int irq;
+	struct xhci_hcd	*xhci;
+	struct usb_hcd	*hcd;
+	unsigned port;
+	unsigned pad;
+	u32 val;
 
 	ret = tegra_xusb_partitions_clk_init(tegra);
 	if (ret) {
@@ -4484,42 +4521,6 @@ static int tegra_xhci_probe(struct platform_device *pdev)
 	tegra_periph_reset_deassert(tegra->ss_clk);
 
 	platform_set_drvdata(pdev, tegra);
-	fw_log_init(tegra);
-	ret = init_firmware(tegra);
-	if (ret < 0) {
-		dev_err(&pdev->dev, "failed to init firmware\n");
-		ret = -ENODEV;
-		goto err_deinit_firmware_log;
-	}
-
-	return 0;
-
-err_deinit_firmware_log:
-	fw_log_deinit(tegra);
-err_deinit_usb2_clocks:
-	tegra_usb2_clocks_deinit(tegra);
-err_deinit_tegra_xusb_regulator:
-	tegra_xusb_regulator_deinit(tegra);
-err_deinit_xusb_partition_clk:
-	if (tegra->transceiver)
-		usb_unregister_notifier(tegra->transceiver, &tegra->otgnb);
-
-	tegra_xusb_partitions_clk_deinit(tegra);
-
-	return ret;
-}
-
-static int tegra_xhci_probe2(struct tegra_xhci_hcd *tegra)
-{
-	struct platform_device *pdev = tegra->pdev;
-	const struct hc_driver *driver;
-	int ret;
-	struct resource	*res;
-	int irq;
-	struct xhci_hcd	*xhci;
-	struct usb_hcd	*hcd;
-	unsigned port;
-
 
 	ret = load_firmware(tegra, false /* do reset ARU */);
 	if (ret < 0) {
@@ -4671,6 +4672,15 @@ err_remove_usb2_hcd:
 	usb_remove_hcd(hcd);
 err_put_usb2_hcd:
 	usb_put_hcd(hcd);
+err_deinit_usb2_clocks:
+	tegra_usb2_clocks_deinit(tegra);
+err_deinit_tegra_xusb_regulator:
+	tegra_xusb_regulator_deinit(tegra);
+err_deinit_xusb_partition_clk:
+	if (tegra->transceiver)
+		usb_unregister_notifier(tegra->transceiver, &tegra->otgnb);
+
+	tegra_xusb_partitions_clk_deinit(tegra);
 
 	return ret;
 }

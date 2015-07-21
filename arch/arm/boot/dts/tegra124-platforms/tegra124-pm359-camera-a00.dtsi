@@ -1,7 +1,7 @@
 /*
  * arch/arm/boot/dts/tegra124-platforms/tegra124-pm359-camera-a00.dtsi
  *
- * Copyright (c) 2014, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2014-2015, NVIDIA CORPORATION.  All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -71,6 +71,35 @@
 					platformdata = "ardbeg_ar0330_front_pdata";
 				};
 			};
+			module5: module5@modules {
+				compatible = "sensor,rear";
+				badge_info = "e1633_ov4689";
+
+				sensor {
+					profile = <&ov4689_1>;
+					platformdata = "ardbeg_ov4689_pdata";
+				};
+			};
+			module6: module6@modules {
+				compatible = "sensor,rear";
+				badge_info = "e1633_ar1335";
+
+				sensor {
+					profile = <&ar1335_1>;
+					platformdata = "ardbeg_ar1335_pdata";
+				};
+			};
+
+			module7: module7@modules {
+				compatible = "sensor,rear";
+				badge_info = "imx185_camera";
+
+				sensor {
+					profile = <&imx185_1>;
+					platformdata = "ardbeg_imx185_pdata";
+				};
+			};
+
 		};
 		profiles {
 			imx135_1: imx135@2_0010 {
@@ -109,6 +138,41 @@
 					CAMERA_REGULATOR_OFF(2)
 					CAMERA_REGULATOR_OFF(1)
 					CAMERA_REGULATOR_OFF(0)
+					CAMERA_END
+					>;
+			};
+			imx185_1: imx185@2_001A {
+				index = <1>;
+				chipname = "pcl_IMX185";
+				type = "sensor";
+				guid = "s_IMX185";
+				position = <0>;
+				bustype = "i2c";
+				busnum = <2>;
+				addr = <0x1A>;
+				datalen = <2>;
+				pinmuxgrp = <0xFFFF>;
+				gpios = <0>;
+				regulators = "vif";
+				clocks = "mclk";
+				drivername = "imx185";
+				detect = <0x1 0x3010 0x00FF 0x39>;
+				devid = <0x0185>;
+				poweron = <
+					CAMERA_IND_CLK_SET(37125)
+					CAMERA_GPIO_CLR(221)
+					CAMERA_REGULATOR_ON(0)
+					CAMERA_WAITUS(10)
+					CAMERA_WAITMS(5)
+					CAMERA_GPIO_SET(221)
+					CAMERA_WAITUS(300)
+					CAMERA_END
+					>;
+				poweroff = <
+					CAMERA_IND_CLK_CLR
+					CAMERA_GPIO_CLR(221)
+					CAMERA_REGULATOR_OFF(0)
+					CAMERA_WAITUS(10)
 					CAMERA_END
 					>;
 			};
@@ -185,7 +249,7 @@
 				datalen = <2>;
 				pinmuxgrp = <0xFFFF>;
 				gpios = <3>;
-				regulators = "vana", "vdig", "vif";
+				regulators = "vana_ar0261", "vdig", "vif";
 				clocks = "mclk2";
 				drivername = "ar0261";
 				detect = <0x0002 0x0003 0xFFFF 0x060A>;
@@ -288,6 +352,79 @@
 					CAMERA_IND_CLK_CLR
 					CAMERA_GPIO_CLR(221)
 					CAMERA_GPIO_CLR(222)
+					CAMERA_WAITUS(10)
+					CAMERA_REGULATOR_OFF(2)
+					CAMERA_REGULATOR_OFF(1)
+					CAMERA_REGULATOR_OFF(0)
+					CAMERA_END
+					>;
+			};
+			ov4689_1: ov4689@2_0036 {
+				index = <6>;
+				chipname = "pcl_OV4689";
+				type = "sensor";
+				guid = "s_OV4689";
+				position = <0>;
+				bustype = "i2c";
+				busnum = <2>;
+				addr = <0x36>;
+				datalen = <2>;
+				pinmuxgrp = <0xFFFF>;
+				gpios = <3>;
+				regulators = "vana", "vdig", "vif";
+				clocks = "mclk";
+				drivername = "ov4689";
+				detect = <0x0002 0x300A 0xFFFF 0x4688>;
+				devid = <0x4689>;
+				poweron = <
+					CAMERA_IND_CLK_SET(10000)
+					CAMERA_GPIO_CLR(221)
+					CAMERA_GPIO_CLR(219)
+					CAMERA_WAITMS(40)
+					CAMERA_REGULATOR_ON(2)
+					CAMERA_GPIO_SET(221)
+					CAMERA_GPIO_SET(219)
+					CAMERA_WAITMS(10)
+					CAMERA_END
+					>;
+				poweroff = <
+					CAMERA_GPIO_CLR(221)
+					CAMERA_IND_CLK_CLR
+					CAMERA_WAITUS(10)
+					CAMERA_END
+					>;
+			};
+			ar1335_1: ar1335@2_0036 {
+				index = <7>;
+				chipname = "pcl_AR1335";
+				type = "sensor";
+				guid = "s_AR1335";
+				position = <0>;
+				bustype = "i2c";
+				busnum = <2>;
+				addr = <0x36>;
+				datalen = <2>;
+				pinmuxgrp = <0xFFFF>;
+				gpios = <3>;
+				regulators = "vana", "vif", "vdig_csi";
+				clocks = "mclk";
+				drivername = "ar1335";
+				detect = <0x0002 0x3000 0xFFFF 0x0153>;
+				devid = <0x1335>;
+				poweron = <
+					CAMERA_IND_CLK_SET(10000)
+					CAMERA_GPIO_CLR(219)
+					CAMERA_REGULATOR_ON(0)
+					CAMERA_REGULATOR_ON(1)
+					CAMERA_REGULATOR_ON(2)
+					CAMERA_WAITMS(10)
+					CAMERA_GPIO_SET(219)
+					CAMERA_WAITMS(20)
+					CAMERA_END
+					>;
+				poweroff = <
+					CAMERA_IND_CLK_CLR
+					CAMERA_GPIO_CLR(219)
 					CAMERA_WAITUS(10)
 					CAMERA_REGULATOR_OFF(2)
 					CAMERA_REGULATOR_OFF(1)

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2013-2015, NVIDIA CORPORATION.  All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -16,6 +16,7 @@
 
 #include <linux/delay.h>
 #include <linux/clk.h>
+#include <linux/regmap.h>
 #include <linux/platform_device.h>
 
 #include <media/soc_camera.h>
@@ -30,6 +31,16 @@
 #define TEGRA_SYNCPT_CSI_WAIT_TIMEOUT                   200
 
 #define TEGRA_VI_CFG_VI_INCR_SYNCPT			0x000
+#define		VI_MWA_REQ_DONE				(4 << 8)
+#define		VI_MWB_REQ_DONE				(5 << 8)
+#define		VI_MWA_ACK_DONE				(6 << 8)
+#define		VI_MWB_ACK_DONE				(7 << 8)
+#define		VI_ISPA_DONE				(8 << 8)
+#define		VI_CSI_PPA_FRAME_START			(9 << 8)
+#define		VI_CSI_PPB_FRAME_START			(10 << 8)
+#define		VI_CSI_PPA_LINE_START			(11 << 8)
+#define		VI_CSI_PPB_LINE_START			(12 << 8)
+
 #define TEGRA_VI_CFG_VI_INCR_SYNCPT_CNTRL		0x004
 #define TEGRA_VI_CFG_VI_INCR_SYNCPT_ERROR		0x008
 #define TEGRA_VI_CFG_CTXSW				0x020
@@ -285,6 +296,52 @@
 #define TEGRA_IMAGE_DT_RAW10				43
 #define TEGRA_IMAGE_DT_RAW12				44
 #define TEGRA_IMAGE_DT_RAW14				45
+
+#define MIPI_CAL_CTRL		0x00
+#define		STARTCAL	(1 << 0)
+#define		CLKEN_OVR	(1 << 4)
+#define MIPI_CAL_AUTOCAL_CTRL0	0x04
+#define CIL_MIPI_CAL_STATUS	0x08
+#define		CAL_DONE	(1 << 16)
+#define CIL_MIPI_CAL_STATUS_2	0x0c
+#define CILA_MIPI_CAL_CONFIG	0x14
+#define		SELA		(1 << 21)
+#define CILB_MIPI_CAL_CONFIG	0x18
+#define		SELB		(1 << 21)
+#define CILC_MIPI_CAL_CONFIG	0x1c
+#define		SELC		(1 << 21)
+#define CILD_MIPI_CAL_CONFIG	0x20
+#define		SELD		(1 << 21)
+#define CILE_MIPI_CAL_CONFIG	0x24
+#define		SELE		(1 << 21)
+#define DSIA_MIPI_CAL_CONFIG	0x38
+#define		SELDSIA		(1 << 21)
+#define DSIB_MIPI_CAL_CONFIG	0x3c
+#define		SELDSIB		(1 << 21)
+#define MIPI_BIAS_PAD_CFG0	0x58
+#define		E_VCLAMP_REF	(1 << 0)
+#define MIPI_BIAS_PAD_CFG1	0x5c
+#define MIPI_BIAS_PAD_CFG2	0x60
+#define		PDVREG		(1 << 1)
+#define DSIA_MIPI_CAL_CONFIG_2	0x64
+#define		CLKSELDSIA	(1 << 21)
+#define DSIB_MIPI_CAL_CONFIG_2	0x68
+#define		CLKSELDSIB	(1 << 21)
+#define CILC_MIPI_CAL_CONFIG_2	0x6c
+#define		CLKSELC		(1 << 21)
+#define CILD_MIPI_CAL_CONFIG_2	0x70
+#define		CLKSELD		(1 << 21)
+#define CSIE_MIPI_CAL_CONFIG_2	0x74
+#define		CLKSELE		(1 << 21)
+
+#define MIPI_CAL_BASE	0x700e3000
+
+static const struct regmap_config mipi_cal_config = {
+	.reg_bits = 32,
+	.reg_stride = 4,
+	.val_bits = 32,
+	.cache_type = REGCACHE_RBTREE,
+};
 
 static int vi2_port_is_valid(int port)
 {
@@ -616,6 +673,9 @@ static int vi2_capture_setup_csi_0(struct tegra_camera_dev *cam,
 	TC_VI_REG_WT(cam, TEGRA_VI_CSI_0_CSI_IMAGE_SIZE,
 			(icd->user_height << 16) | icd->user_width);
 
+	/* Start pixel parser in single shot mode at beginning */
+	TC_VI_REG_WT(cam, TEGRA_CSI_PIXEL_STREAM_PPA_COMMAND, 0xf005);
+
 	return 0;
 }
 
@@ -718,6 +778,9 @@ static int vi2_capture_setup_csi_1(struct tegra_camera_dev *cam,
 
 	TC_VI_REG_WT(cam, TEGRA_VI_CSI_1_CSI_IMAGE_SIZE,
 			(icd->user_height << 16) | icd->user_width);
+
+	/* Start pixel parser in single shot mode at beginning */
+	TC_VI_REG_WT(cam, TEGRA_CSI_PIXEL_STREAM_PPB_COMMAND, 0xf005);
 
 	return 0;
 }
@@ -907,10 +970,9 @@ static int vi2_capture_start(struct tegra_camera_dev *cam,
 						cam->syncpt_id_csi_a, 1);
 
 		TC_VI_REG_WT(cam, TEGRA_VI_CFG_VI_INCR_SYNCPT,
-				(6 << 8) | cam->syncpt_id_csi_a);
-		TC_VI_REG_WT(cam, TEGRA_CSI_PIXEL_STREAM_PPA_COMMAND,
-				0x0000f005);
+			     VI_CSI_PPA_FRAME_START | cam->syncpt_id_csi_a);
 		TC_VI_REG_WT(cam, TEGRA_VI_CSI_0_SINGLE_SHOT, 0x1);
+
 		err = nvhost_syncpt_wait_timeout_ext(cam->ndev,
 				cam->syncpt_id_csi_a,
 				cam->syncpt_csi_a,
@@ -926,10 +988,9 @@ static int vi2_capture_start(struct tegra_camera_dev *cam,
 						cam->syncpt_id_csi_b, 1);
 
 		TC_VI_REG_WT(cam, TEGRA_VI_CFG_VI_INCR_SYNCPT,
-				(7 << 8) | cam->syncpt_id_csi_b);
-		TC_VI_REG_WT(cam, TEGRA_CSI_PIXEL_STREAM_PPB_COMMAND,
-				0x0000f005);
+			     VI_CSI_PPB_FRAME_START | cam->syncpt_id_csi_b);
 		TC_VI_REG_WT(cam, TEGRA_VI_CSI_1_SINGLE_SHOT, 0x1);
+
 		err = nvhost_syncpt_wait_timeout_ext(cam->ndev,
 				cam->syncpt_id_csi_b,
 				cam->syncpt_csi_b,
@@ -961,15 +1022,65 @@ static int vi2_capture_start(struct tegra_camera_dev *cam,
 
 static int vi2_capture_stop(struct tegra_camera_dev *cam, int port)
 {
-	if (port == TEGRA_CAMERA_PORT_CSI_A)
-		TC_VI_REG_WT(cam, TEGRA_CSI_PIXEL_STREAM_PPA_COMMAND,
-			     0x0000f002);
-	else if (port == TEGRA_CAMERA_PORT_CSI_B ||
-			port == TEGRA_CAMERA_PORT_CSI_C)
-		TC_VI_REG_WT(cam, TEGRA_CSI_PIXEL_STREAM_PPB_COMMAND,
-			     0x0000f002);
+	u32 val;
+	int err = 0;
 
-	return 0;
+	if (port == TEGRA_CAMERA_PORT_CSI_A) {
+		if (!nvhost_syncpt_read_ext_check(cam->ndev,
+						  cam->syncpt_id_csi_a, &val))
+			cam->syncpt_csi_a = nvhost_syncpt_incr_max_ext(
+						cam->ndev,
+						cam->syncpt_id_csi_a, 1);
+
+		/*
+		 * Make sure recieve VI_MWA_ACK_DONE of the last frame before
+		 * stop and dequeue buffer, otherwise MC error will shows up
+		 * for the last frame.
+		 */
+		TC_VI_REG_WT(cam, TEGRA_VI_CFG_VI_INCR_SYNCPT,
+			     VI_MWA_ACK_DONE | cam->syncpt_id_csi_a);
+
+		/*
+		 * Ignore error here and just stop pixel parser after waiting,
+		 * even if it's timeout
+		 */
+		err = nvhost_syncpt_wait_timeout_ext(cam->ndev,
+				cam->syncpt_id_csi_a,
+				cam->syncpt_csi_a,
+				TEGRA_SYNCPT_CSI_WAIT_TIMEOUT,
+				NULL,
+				NULL);
+		TC_VI_REG_WT(cam, TEGRA_CSI_PIXEL_STREAM_PPA_COMMAND, 0xf002);
+	} else if (port == TEGRA_CAMERA_PORT_CSI_B ||
+			port == TEGRA_CAMERA_PORT_CSI_C) {
+		if (!nvhost_syncpt_read_ext_check(cam->ndev,
+						  cam->syncpt_id_csi_b, &val))
+			cam->syncpt_csi_b = nvhost_syncpt_incr_max_ext(
+						cam->ndev,
+						cam->syncpt_id_csi_b, 1);
+
+		/*
+		 * Make sure recieve VI_MWB_ACK_DONE of the last frame before
+		 * stop and dequeue buffer, otherwise MC error will shows up
+		 * for the last frame.
+		 */
+		TC_VI_REG_WT(cam, TEGRA_VI_CFG_VI_INCR_SYNCPT,
+			     VI_MWB_ACK_DONE | cam->syncpt_id_csi_b);
+
+		/*
+		 * Ignore error here and just stop pixel parser after waiting,
+		 * even if it's timeout
+		 */
+		err = nvhost_syncpt_wait_timeout_ext(cam->ndev,
+				cam->syncpt_id_csi_b,
+				cam->syncpt_csi_b,
+				TEGRA_SYNCPT_CSI_WAIT_TIMEOUT,
+				NULL,
+				NULL);
+		TC_VI_REG_WT(cam, TEGRA_CSI_PIXEL_STREAM_PPB_COMMAND, 0xf002);
+	}
+
+	return err;
 }
 
 /* Reset VI2/CSI2 when activating, no sepecial ops for deactiving  */
@@ -981,6 +1092,148 @@ static void vi2_sw_reset(struct tegra_camera_dev *cam)
 	TC_VI_REG_WT(cam, TEGRA_CSI_CLKEN_OVERRIDE, 0x0);
 
 	udelay(10);
+}
+
+
+
+static int vi2_mipi_calibration(struct tegra_camera_dev *cam)
+{
+	void __iomem *mipi_cal;
+	struct regmap *regs;
+	struct platform_device *pdev = cam->ndev;
+	struct vb2_buffer *vb = cam->active;
+	struct tegra_camera_buffer *buf = to_tegra_vb(vb);
+	struct soc_camera_device *icd = buf->icd;
+	struct soc_camera_subdev_desc *ssdesc = &icd->sdesc->subdev_desc;
+	struct tegra_camera_platform_data *pdata = ssdesc->drv_priv;
+	int port = pdata->port;
+	u32 val;
+	struct clk *clk_mipi_cal = NULL, *clk_72mhz = NULL;
+	int retry = 500;
+
+	/* TPG mode doesn't need any calibration */
+	if (cam->tpg_mode)
+		return 0;
+
+	/* Get clks for MIPI Calibration */
+	clk_mipi_cal = clk_get_sys("mipi-cal", NULL);
+	if (IS_ERR_OR_NULL(clk_mipi_cal)) {
+		dev_err(&pdev->dev, "cannot get mipi-cal clk.\n");
+		return PTR_ERR(clk_mipi_cal);
+	}
+
+	clk_72mhz = clk_get_sys("clk72mhz", NULL);
+	if (IS_ERR_OR_NULL(clk_72mhz)) {
+		dev_err(&pdev->dev, "cannot get 72MHz clk.\n");
+		return PTR_ERR(clk_72mhz);
+	}
+
+	/* Map registers */
+	mipi_cal = ioremap(MIPI_CAL_BASE, 0x100);
+	if (!mipi_cal)
+		return -ENOMEM;
+
+	regs = devm_regmap_init_mmio(&pdev->dev, mipi_cal, &mipi_cal_config);
+	if (IS_ERR(regs)) {
+		dev_err(&pdev->dev, "regmap init failed\n");
+		iounmap(mipi_cal);
+		return PTR_ERR(regs);
+	}
+
+	/* Enable MIPI Calibration clocks */
+	if (clk_mipi_cal)
+		clk_prepare_enable(clk_mipi_cal);
+	if (clk_72mhz)
+		clk_prepare_enable(clk_72mhz);
+
+	/* MIPI_CAL_CLKEN_OVR = 1 */
+	regmap_update_bits(regs, MIPI_CAL_CTRL, CLKEN_OVR, CLKEN_OVR);
+
+	/* Clear MIPI CAL status flags */
+	regmap_write(regs, CIL_MIPI_CAL_STATUS, 0xF1F10000);
+	regmap_update_bits(regs, DSIA_MIPI_CAL_CONFIG, SELDSIA, 0);
+	regmap_update_bits(regs, DSIB_MIPI_CAL_CONFIG, SELDSIB, 0);
+	regmap_update_bits(regs, MIPI_BIAS_PAD_CFG0,
+			   E_VCLAMP_REF, E_VCLAMP_REF);
+	regmap_update_bits(regs, MIPI_BIAS_PAD_CFG2, PDVREG, 0);
+	regmap_update_bits(regs, CILA_MIPI_CAL_CONFIG, SELA, 0);
+	regmap_update_bits(regs, DSIA_MIPI_CAL_CONFIG_2, CLKSELDSIA, 0);
+	regmap_update_bits(regs, CILB_MIPI_CAL_CONFIG, SELB, 0);
+	regmap_update_bits(regs, DSIB_MIPI_CAL_CONFIG_2, CLKSELDSIB, 0);
+	regmap_update_bits(regs, CILC_MIPI_CAL_CONFIG, SELC, 0);
+	regmap_update_bits(regs, CILC_MIPI_CAL_CONFIG_2, CLKSELC, 0);
+	regmap_update_bits(regs, CILD_MIPI_CAL_CONFIG, SELD, 0);
+	regmap_update_bits(regs, CILD_MIPI_CAL_CONFIG_2, CLKSELD, 0);
+	regmap_update_bits(regs, CILE_MIPI_CAL_CONFIG, SELE, 0);
+	regmap_update_bits(regs, CSIE_MIPI_CAL_CONFIG_2, CLKSELE, 0);
+
+	/* Select the CIL pad for auto calibration */
+	switch (port) {
+	case TEGRA_CAMERA_PORT_CSI_A:
+		regmap_update_bits(regs, CILA_MIPI_CAL_CONFIG, SELA, SELA);
+		regmap_update_bits(regs, DSIA_MIPI_CAL_CONFIG_2, CLKSELDSIA, 0);
+		if (pdata->lanes > 2) {
+			regmap_update_bits(regs, CILB_MIPI_CAL_CONFIG,
+					   SELB, SELB);
+			regmap_update_bits(regs, DSIB_MIPI_CAL_CONFIG_2,
+					   CLKSELDSIB, 0);
+		}
+		break;
+	case TEGRA_CAMERA_PORT_CSI_B:
+		regmap_update_bits(regs, CILC_MIPI_CAL_CONFIG, SELC, SELC);
+		regmap_update_bits(regs, CILC_MIPI_CAL_CONFIG_2, CLKSELC, 0);
+		if (pdata->lanes > 2) {
+			regmap_update_bits(regs, CILD_MIPI_CAL_CONFIG,
+					   SELD, SELD);
+			regmap_update_bits(regs, CILD_MIPI_CAL_CONFIG_2,
+					   CLKSELD, 0);
+		}
+		break;
+	case TEGRA_CAMERA_PORT_CSI_C:
+		regmap_update_bits(regs, CILE_MIPI_CAL_CONFIG, SELE, SELE);
+		regmap_update_bits(regs, CSIE_MIPI_CAL_CONFIG_2,
+				   CLKSELE, CLKSELE);
+		break;
+	default:
+		dev_err(&pdev->dev, "wrong port %d\n", port);
+	}
+
+	/* Trigger calibration */
+	regmap_update_bits(regs, MIPI_CAL_CTRL, STARTCAL, STARTCAL);
+	while (--retry) {
+		regmap_read(regs, CIL_MIPI_CAL_STATUS, &val);
+		if (val & CAL_DONE)
+			break;
+		usleep_range(200, 300);
+	}
+
+	/* Cleanup: un-select to avoid interference with DSI */
+	regmap_update_bits(regs, CILA_MIPI_CAL_CONFIG, SELA, 0);
+	regmap_update_bits(regs, DSIA_MIPI_CAL_CONFIG_2,
+			   CLKSELDSIA, CLKSELDSIA);
+	regmap_update_bits(regs, CILB_MIPI_CAL_CONFIG, SELB, 0);
+	regmap_update_bits(regs, DSIB_MIPI_CAL_CONFIG_2,
+			   CLKSELDSIB, CLKSELDSIB);
+	regmap_update_bits(regs, CILC_MIPI_CAL_CONFIG, SELC, 0);
+	regmap_update_bits(regs, CILC_MIPI_CAL_CONFIG_2, CLKSELC, CLKSELC);
+	regmap_update_bits(regs, CILD_MIPI_CAL_CONFIG, SELD, 0);
+	regmap_update_bits(regs, CILD_MIPI_CAL_CONFIG_2, CLKSELD, CLKSELD);
+	regmap_update_bits(regs, CILE_MIPI_CAL_CONFIG, SELE, 0);
+	regmap_update_bits(regs, CSIE_MIPI_CAL_CONFIG_2, CLKSELE, 0);
+
+	/* Disable clocks */
+	if (clk_mipi_cal)
+		clk_disable_unprepare(clk_mipi_cal);
+	if (clk_72mhz)
+		clk_disable_unprepare(clk_72mhz);
+
+	if (!retry) {
+		dev_err(&pdev->dev, "MIPI calibration timeout!\n");
+		return -EBUSY;
+	}
+
+	dev_dbg(&pdev->dev, "MIPI calibration for CSI is done\n");
+	return 0;
 }
 
 struct tegra_camera_ops vi2_ops = {
@@ -1001,6 +1254,8 @@ struct tegra_camera_ops vi2_ops = {
 	.incr_syncpts = vi2_incr_syncpts,
 
 	.port_is_valid = vi2_port_is_valid,
+
+	.mipi_calibration = vi2_mipi_calibration,
 };
 
 int vi2_register(struct tegra_camera_dev *cam)

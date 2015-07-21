@@ -27,6 +27,14 @@
 
 struct quadd_hrt_ctx;
 
+struct quadd_unw_methods {
+	unsigned int
+		fp:1,
+		ut:1,
+		ut_ce:1,
+		dwarf:1;
+};
+
 struct quadd_callchain {
 	int nr;
 
@@ -39,12 +47,17 @@ struct quadd_callchain {
 
 	int cs_64;
 
-	unsigned int unw_method;
-	unsigned int unw_rc;
+	struct quadd_unw_methods um;
+
+	unsigned int urc_fp;
+	unsigned int urc_ut;
+	unsigned int urc_dwarf;
 
 	unsigned long curr_sp;
 	unsigned long curr_fp;
+	unsigned long curr_fp_thumb;
 	unsigned long curr_pc;
+	unsigned long curr_lr;
 
 	struct quadd_hrt_ctx *hrt;
 };
