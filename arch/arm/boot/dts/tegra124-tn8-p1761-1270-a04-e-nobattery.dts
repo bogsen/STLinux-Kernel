@@ -22,9 +22,16 @@
 	#size-cells = <2>;
 
 	chosen {
-		bootargs = "tegraid=40.0.0.00.00 vmalloc=256M video=tegrafb console=ttyS0,115200n8 earlyprintk";
-		linux,initrd-start = <0x85000000>;
-		linux,initrd-end = <0x851bc400>;
+		bootargs = "displayboard=0x0791:0x03e8:0x00:0x00:0x00 pmuboard=0x06e1:0x04d2:0x04:0x00:0x00";
+	};
+
+	host1x {
+		tsec {
+			carveout {
+				carveout_addr = <0xfe000000>;
+				carveout_size = <0x2000000>;
+			};
+		};
 	};
 
 	i2c@7000d000 {
