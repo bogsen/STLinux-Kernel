@@ -95,6 +95,43 @@ static void merge_fdt_bootargs(void *fdt, const char *fdt_cmdline)
 	setprop_string(fdt, "/chosen", "bootargs", cmdline);
 }
 
+static int merge_chosen(void *fdt_from, void *fdt_to, int total_space)
+{
+	const void *val;
+	int ret;
+
+	ret = fdt_open_into(fdt_to, fdt_to, total_space);
+	if (ret < 0)
+		return ret;
+
+	/* This might get called multiple times,
+	 * so make sure we only copy the parameters once */
+	val = getprop(fdt_from, "/chosen", "linux,imported-from-dtb", NULL);
+	if (!val) {
+		setprop_cell(fdt_to, "/chosen", "linux,imported-from-dtb", 1);
+
+		val = getprop(fdt_from, "/chosen", "bootargs", NULL);
+		if (val) {
+			if (do_extend_cmdline)
+				merge_fdt_bootargs(fdt_to, val);
+			else
+				setprop_string(fdt_to, "/chosen", "bootargs", val);
+		}
+
+		val = getprop(fdt_from, "/chosen", "linux,initrd-start", NULL);
+		if (val)
+			setprop_cell(fdt_to, "/chosen", "linux,initrd-start",
+				     fdt32_to_cpu(*(u32 *)val));
+
+		val = getprop(fdt_from, "/chosen", "linux,initrd-end", NULL);
+		if (val)
+			setprop_cell(fdt_to, "/chosen", "linux,initrd-end",
+				     fdt32_to_cpu(*(u32 *)val));
+	}
+
+	return fdt_pack(fdt_to);
+}
+
 /*
  * Convert and fold provided ATAGs into the provided FDT.
  *
@@ -118,7 +155,7 @@ int atags_to_fdt(void *atag_list, void *fdt, int total_space)
 
 	/* if we get a DTB here we're done already */
 	if (*(u32 *)atag_list == fdt32_to_cpu(FDT_MAGIC))
-	       return 0;
+		return merge_chosen(atag_list, fdt, total_space);
 
 	/* validate the ATAG */
 	if (atag->hdr.tag != ATAG_CORE ||

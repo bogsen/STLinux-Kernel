@@ -2105,7 +2105,7 @@ config ARM_APPENDED_DTB
 	  to this option.
 
 config ARM_ATAG_DTB_COMPAT
-	bool "Supplement the appended DTB with traditional ATAG information"
+	bool "Supplement the appended DTB with bootloader ATAG/DTB information"
 	depends on ARM_APPENDED_DTB
 	help
 	  Some old bootloaders can't be updated to a DTB capable one, yet
@@ -2115,6 +2115,8 @@ config ARM_ATAG_DTB_COMPAT
 	  DTB.  To allow a device tree enabled kernel to be used with such
 	  bootloaders, this option allows zImage to extract the information
 	  from the ATAG list and store it at run time into the appended DTB.
+	  If the bootloader provides a DTB, its cmdline and ramdisk address
+	  will be used.
 
 choice
 	prompt "Kernel command line type" if ARM_ATAG_DTB_COMPAT
